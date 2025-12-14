@@ -1,10 +1,10 @@
 # audit/audit_commands.py
 from discord.ext import commands
-from .case_audit import CaseAudit
+from audit.audit_helpers import find_duplicate_person_in_message
 
 
 def setup_audit_commands(bot, get_conn, is_pbt):
-    audit = CaseAudit(get_conn)
+    bot.add_command(audit_person)
 
     @bot.command()
     @is_pbt()
@@ -30,7 +30,7 @@ def setup_audit_commands(bot, get_conn, is_pbt):
             await ctx.send(msg)
 
         elif section == "person":
-            rows = audit.find_duplicate_person_in_message()
+            rows = find_duplicate_person_in_message(get_conn)
             if not rows:
                 await ctx.send("✅ ไม่พบคนซ้ำใน message เดียว")
                 return
