@@ -286,24 +286,24 @@ async def on_message(message):
 
 
     for member in mentions:
-    print(f"{member.display_name} +{case_value} เคส")
+        print(f"{member.display_name} +{case_value} เคส")
 
-    # ✅ STEP 2: เขียนลง PostgreSQL
-    save_case_pg(
-        member.display_name,
-        message.channel.name,
-        case_value,
-        message.id
-    )
+    # เขียนลง PostgreSQL
+        save_case_pg(
+            member.display_name,
+            message.channel.name,
+            case_value,
+            message.id
+        )
 
-    # (ยังเก็บ CSV ไว้ก่อน)
-    save_case(
-        member.display_name,
-        message.channel.name,
-        case_type,
-        case_value,
-        message.id
-    )
+    # เขียนลง CSV (ยังเก็บไว้ก่อน)
+        save_case(
+            member.display_name,
+            message.channel.name,
+            case_type,
+            case_value,
+            message.id
+        )
 
     processed_messages.add(str(message.id))
     save_processed(message.id)
