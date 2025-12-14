@@ -6,11 +6,12 @@ on:
       - main
 
 jobs:
-  notify:
+  notify-success:
     runs-on: ubuntu-latest
+    if: success()
 
     steps:
-      - name: Send Discord Embed
+      - name: Send Discord Success Embed
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           REPO: ${{ github.repository }}
@@ -21,27 +22,37 @@ jobs:
           curl -X POST -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
-              "title": "🚀 Push to main",
+              "title": "✅ Deploy Success",
               "color": 3066993,
               "fields": [
-                {
-                  "name": "📦 Repository",
-                  "value": "'"$REPO"'",
-                  "inline": true
-                },
-                {
-                  "name": "👤 By",
-                  "value": "'"$ACTOR"'",
-                  "inline": true
-                },
-                {
-                  "name": "📝 Commit",
-                  "value": "'"$COMMIT_MSG"'"
-                },
-                {
-                  "name": "🔗 Link",
-                  "value": "[View Commit]('"$COMMIT_URL"')"
-                }
+                { "name": "📦 Repo", "value": "'"$REPO"'", "inline": true },
+                { "name": "👤 By", "value": "'"$ACTOR"'", "inline": true },
+                { "name": "📝 Commit", "value": "'"$COMMIT_MSG"'" },
+                { "name": "🔗 Link", "value": "[View Commit]('"$COMMIT_URL"')" }
+              ]
+            }]
+          }' $DISCORD_WEBHOOK
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Send Discord Failure Embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "❌ Deploy Failed",
+              "color": 15158332,
+              "description": "Deployment failed. Check GitHub Actions logs.",
+              "fields": [
+                { "name": "📦 Repo", "value": "'"$REPO"'", "inline": true },
+                { "name": "👤 By", "value": "'"$ACTOR"'", "inline": true }
               ]
             }]
           }' $DISCORD_WEBHOOK
