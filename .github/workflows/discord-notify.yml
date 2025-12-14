@@ -2,57 +2,32 @@ name: Discord Notify
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  notify-success:
+  notify:
     runs-on: ubuntu-latest
-    if: success()
 
     steps:
-      - name: Send Discord Success Embed
+      - name: Send Discord Notification
+        if: always()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           REPO: ${{ github.repository }}
           ACTOR: ${{ github.actor }}
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
-          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMMIT_MSG: ${{ github.event.commits[0].message }}
+          COMMIT_URL: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{
-            "embeds": [{
-              "title": "✅ Deploy Success",
-              "color": 3066993,
-              "fields": [
-                { "name": "📦 Repo", "value": "'"$REPO"'", "inline": true },
-                { "name": "👤 By", "value": "'"$ACTOR"'", "inline": true },
-                { "name": "📝 Commit", "value": "'"$COMMIT_MSG"'" },
-                { "name": "🔗 Link", "value": "[View Commit]('"$COMMIT_URL"')" }
+          -d "{
+            \"embeds\": [{
+              \"title\": \"🚀 Push to main\",
+              \"color\": 3447003,
+              \"fields\": [
+                { \"name\": \"📦 Repo\", \"value\": \"$REPO\", \"inline\": true },
+                { \"name\": \"👤 By\", \"value\": \"$ACTOR\", \"inline\": true },
+                { \"name\": \"📝 Commit\", \"value\": \"$COMMIT_MSG\" },
+                { \"name\": \"🔗 Link\", \"value\": \"[View Commit]($COMMIT_URL)\" }
               ]
             }]
-          }' $DISCORD_WEBHOOK
-
-  notify-failure:
-    runs-on: ubuntu-latest
-    if: failure()
-
-    steps:
-      - name: Send Discord Failure Embed
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          REPO: ${{ github.repository }}
-          ACTOR: ${{ github.actor }}
-        run: |
-          curl -X POST -H "Content-Type: application/json" \
-          -d '{
-            "embeds": [{
-              "title": "❌ Deploy Failed",
-              "color": 15158332,
-              "description": "Deployment failed. Check GitHub Actions logs.",
-              "fields": [
-                { "name": "📦 Repo", "value": "'"$REPO"'", "inline": true },
-                { "name": "👤 By", "value": "'"$ACTOR"'", "inline": true }
-              ]
-            }]
-          }' $DISCORD_WEBHOOK
+          }" $DISCORD_WEBHOOK
