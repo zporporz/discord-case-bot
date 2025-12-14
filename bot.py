@@ -211,7 +211,7 @@ async def on_message(message):
     processed_messages.add(str(message.id))
     save_processed(message.id)
     
- @bot.command(name="cmd")
+@bot.command(name="cmd")
 async def cmd(ctx, section: str = None):
 
     # ======================
