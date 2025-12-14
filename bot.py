@@ -43,13 +43,22 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL)
 
 
-def save_case_pg(name, channel, case_type, cases, message_id, message_date):
+def save_case_pg(
+    name: str,
+    channel: str,
+    case_type: str,
+    cases: int,
+    message_id: int,
+    message_date
+):
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO cases (date, name, channel, case_type, cases, message_id)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO cases
+                        (date, name, channel, case_type, cases, message_id)
+                    VALUES
+                        (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (message_id, name) DO NOTHING
                 """, (
                     message_date,
@@ -59,7 +68,10 @@ def save_case_pg(name, channel, case_type, cases, message_id, message_date):
                     cases,
                     str(message_id)
                 ))
-        print(f"✅ Saved: {name} [{case_type}] +{cases} ({message_date})")
+        print(
+            f"✅ Saved | {name} | {case_type} | +{cases} | "
+            f"date={message_date} | msg={message_id}"
+        )
     except Exception as e:
         print("❌ DB error:", e)
 
@@ -95,7 +107,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ======================
 @bot.event
 async def on_ready():
-    print(f"🤖 บอทออนไลน์แล้ว: {bot.user}")
+    print(f"🤖 Bot online: {bot.user}")
 
 
 @bot.event
@@ -105,18 +117,27 @@ async def on_message(message):
     if message.author.bot or not message.mentions:
         return
 
+    # เลือกประเภทเคส
     if message.channel.id == CASE10_CHANNEL_ID:
-        case_type, case_value = "case10", 2
+        case_type = "case10"
+        case_value = 2
     elif message.channel.id in NORMAL_CHANNEL_IDS:
-        case_type, case_value = "normal", 1
+        case_type = "normal"
+        case_value = 1
     else:
         return
 
     message_date = message.created_at.astimezone().date()
-    unique_members = set(message.mentions)
 
-    if len(unique_members) != len(message.mentions):
-        print(f"⚠️ Duplicate mention | message_id={message.id}")
+    mentions = message.mentions
+    unique_members = set(mentions)
+
+    if len(mentions) != len(unique_members):
+        print(
+            f"⚠️ Duplicate mention detected | "
+            f"msg={message.id} | "
+            f"{len(mentions)} → {len(unique_members)}"
+        )
 
     for member in unique_members:
         save_case_pg(
@@ -141,7 +162,7 @@ async def on_message_delete(message):
                     "DELETE FROM cases WHERE message_id = %s",
                     (str(message.id),)
                 )
-        print(f"🗑️ Deleted cases for message {message.id}")
+        print(f"🗑️ Deleted cases | msg={message.id}")
     except Exception as e:
         print("❌ DB delete error:", e)
 
@@ -151,28 +172,35 @@ async def on_message_edit(before, after):
     if after.author.bot:
         return
 
-    # ❌ กันแก้ไขข้ามวัน
+    # กันแก้ไขข้ามวัน
     if after.created_at.date() != datetime.now().date():
-        print(f"⛔ Ignore edit (old message): {after.id}")
+        print(f"⛔ Ignore edit (old message) | msg={after.id}")
         return
 
-    print(f"✏️ Message edited: {after.id}")
+    print(f"✏️ Message edited | msg={after.id}")
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM cases WHERE message_id = %s",
-                (str(after.id),)
-            )
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM cases WHERE message_id = %s",
+                    (str(after.id),)
+                )
+        print(f"🗑️ Deleted old cases | msg={after.id}")
+    except Exception as e:
+        print("❌ DB delete error (edit):", e)
+        return
 
     if not after.mentions:
-        print("ℹ️ No mentions after edit")
+        print(f"ℹ️ No mentions after edit | msg={after.id}")
         return
 
     if after.channel.id == CASE10_CHANNEL_ID:
-        case_type, case_value = "case10", 2
+        case_type = "case10"
+        case_value = 2
     elif after.channel.id in NORMAL_CHANNEL_IDS:
-        case_type, case_value = "normal", 1
+        case_type = "normal"
+        case_value = 1
     else:
         return
 
@@ -199,18 +227,17 @@ async def today(ctx):
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(r"""
                 SELECT name, case_type, COUNT(*), SUM(cases)
                 FROM cases
                 WHERE date = %s
                 GROUP BY name, case_type
                 ORDER BY regexp_replace(
                     name,
-                    r'^\+?\d+\s*\[.*?\]\s*',
+                    '^\+?\d+\s*\[.*?\]\s*',
                     '',
                     'g'
                 )
-
             """, (today,))
             rows = cur.fetchall()
 
@@ -218,24 +245,10 @@ async def today(ctx):
         await ctx.send("วันนี้ยังไม่มีคดี")
         return
 
-    normal, case10 = {}, {}
-
-    for name, ctype, inc, total in rows:
-        target = normal if ctype == "normal" else case10
-        target[name] = (inc, total)
-
     msg = "📊 **สรุปคดีวันนี้**\n\n"
-
-    if normal:
-        msg += "🟦 **คดีปกติ**\n"
-        for n, (i, t) in normal.items():
-            msg += f"- {n}: {i} คดี ({t} เคส)\n"
-        msg += "\n"
-
-    if case10:
-        msg += "🟥 **คดีจุด 10**\n"
-        for n, (i, t) in case10.items():
-            msg += f"- {n}: {i} คดี ({t} เคส)\n"
+    for name, ctype, inc, total in rows:
+        label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
+        msg += f"- {name}: {label} {inc} คดี ({total} เคส)\n"
 
     await ctx.send(msg)
 
@@ -259,8 +272,7 @@ async def me(ctx):
         await ctx.send("วันนี้คุณยังไม่มีคดี")
         return
 
-    msg = f"👮 **{name} วันนี้**\n"
-
+    msg = f"👮 **{name} วันนี้**\n\n"
     for ctype, inc, total in rows:
         label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
         msg += f"- {label}: {inc} คดี ({total} เคส)\n"
@@ -280,14 +292,14 @@ async def date(ctx, date_str: str):
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(r"""
                 SELECT name, case_type, COUNT(*), SUM(cases)
                 FROM cases
                 WHERE date = %s
                 GROUP BY name, case_type
                 ORDER BY regexp_replace(
                     name,
-                    r'^\+?\d+\s*\[.*?\]\s*',
+                    '^\+?\d+\s*\[.*?\]\s*',
                     '',
                     'g'
                 )
@@ -356,17 +368,17 @@ async def check(ctx, *, keyword: str = None):
 
     msg = f"🔍 **ผลการค้นหา {keyword} วันนี้**\n\n"
     for name, ctype, inc, total in rows:
-        label = "ปกติ" if ctype == "normal" else "จุด 10"
+        label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
         msg += f"- {name}: {label} {inc} คดี ({total} เคส)\n"
 
     await ctx.send(msg)
 
 
+# ======================
+# CMD HELP (สำคัญ)
+# ======================
 @bot.command()
 async def cmd(ctx, section: str = None):
-    # ======================
-    # CMD ทั่วไป
-    # ======================
     if section is None:
         msg = (
             "📖 **คำสั่งบอทนับคดี**\n\n"
@@ -375,35 +387,26 @@ async def cmd(ctx, section: str = None):
             "`!me` — ดูคดีของตัวเองวันนี้\n"
             "`!date DD/MM` — ดูคดีย้อนหลังตามวันที่\n"
             "`!week` — สรุปคดีประจำสัปดาห์ (อาทิตย์–เสาร์)\n"
-            "`!check ชื่อ` — 🔍 ค้นหาคดีของบุคคล (วันนี้)\n"
-            "`!checkdate DD/MM ชื่อ` — 🔍 ค้นหาคดีของบุคคลตามวันที่\n\n"
+            "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (วันนี้)\n\n"
             "🛠️ พิมพ์ `!cmd admin` สำหรับคำสั่งผู้บังคับบัญชา"
         )
         await ctx.send(msg)
         return
 
-    # ======================
-    # CMD ADMIN
-    # ======================
     if section.lower() == "admin":
         if not any(role.id == PBT_ROLE_ID for role in ctx.author.roles):
-            await ctx.send("⛔ คำสั่งนี้ใช้ได้เฉพาะ **ผบตร.** เท่านั้น")
+            await ctx.send("⛔ ใช้ได้เฉพาะ **ผบตร.**")
             return
 
         msg = (
             "🛑 **คำสั่งผู้บังคับบัญชา (ผบตร.)**\n\n"
-            "`!resetdb` — 🧨 ลบข้อมูลคดีทั้งหมดในฐานข้อมูล\n"
-            "`!confirm <password>` — ยืนยันการลบข้อมูล\n\n"
-            "⚠️ ใช้ด้วยความระมัดระวัง"
+            "`!resetdb` — 🧨 ลบข้อมูลคดีทั้งหมด\n"
+            "`!confirm <password>` — ยืนยันการลบข้อมูล"
         )
         await ctx.send(msg)
         return
 
-    # ======================
-    # CMD ไม่รู้จัก
-    # ======================
     await ctx.send("❓ ไม่พบหมวดคำสั่งนี้ ใช้ `!cmd` หรือ `!cmd admin`")
-
 
 
 # ======================
