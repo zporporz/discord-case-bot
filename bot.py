@@ -4,6 +4,14 @@ import os
 import discord
 from discord.ext import commands
 from datetime import timedelta
+import re
+
+def normalize_name(name: str):
+    # ตัด +xxx, [GRPL], emoji คร่าว ๆ
+    name = re.sub(r"\+?\d+\s*", "", name)
+    name = re.sub(r"\[.*?\]\s*", "", name)
+    return name.strip().lower()
+
 
 def is_sun_to_sat(start_date, end_date):
     # Sunday = 6, Saturday = 5 (ตาม weekday ของ Python)
@@ -52,6 +60,25 @@ bot = commands.Bot(
 )
 
 PROCESSED_FILE = "processed_messages.txt"
+
+def remove_case_by_message_id(message_id):
+    if not os.path.exists("cases.csv"):
+        return
+
+    rows = []
+    with open("cases.csv", "r", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("message_id") != str(message_id):
+                rows.append(row)
+
+    with open("cases.csv", "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["date", "name", "channel", "cases", "message_id"]
+        )
+        writer.writeheader()
+        writer.writerows(rows)
 
 def save_case(name, channel, cases, message_id):
     file_exists = os.path.exists("cases.csv")
@@ -105,6 +132,41 @@ async def on_message_delete(message):
     save_deleted(message.id)
 
     print(f"❌ ลบเคสจากห้อง {message.channel.name} | message_id = {message.id}")
+
+@bot.event
+async def on_message_edit(before, after):
+    if after.author.bot:
+        return
+
+    if not after.channel or not after.id:
+        return
+
+    valid_channels = [CASE10_CHANNEL_ID] + NORMAL_CHANNEL_IDS
+    if after.channel.id not in valid_channels:
+        return
+
+    # ลบเคสเดิม
+    remove_case_by_message_id(after.id)
+
+    mentions = after.mentions
+    if not mentions:
+        print(f"✏️ แก้ข้อความ แต่ไม่มี mention → message_id {after.id}")
+        return
+
+    if after.channel.id == CASE10_CHANNEL_ID:
+        case_value = 2
+    else:
+        case_value = 1
+
+    for member in mentions:
+        save_case(
+            member.display_name,
+            after.channel.name,
+            case_value,
+            after.id
+        )
+
+    print(f"✏️ แก้ไขเคสใหม่จาก message_id = {after.id}")
       
 
 def save_processed(message_id):
@@ -171,9 +233,10 @@ async def today(ctx):
         return
 
     msg = "📊 **สรุปเคสวันนี้**\n"
-    for name in sorted(summary):
+    for name in sorted(summary, key=normalize_name):
         total = summary[name]
         msg += f"- {name}: {total} เคส\n"
+
 
     await ctx.send(msg)
 
@@ -237,9 +300,10 @@ async def date(ctx, date_str: str):
         return
 
     msg = f"📊 **สรุปเคสวันที่ {date_str}**\n"
-    for name in sorted(summary):
+    for name in sorted(summary, key=normalize_name):
         total = summary[name]
         msg += f"- {name}: {total} เคส\n"
+
 
     await ctx.send(msg)
     
@@ -409,8 +473,10 @@ async def week(ctx, start: str = None, end: str = None):
     add_group("✅ 300+ เคส", group_300)
     
     msg += "**📋 รวมทุกนาย (ทั้งหมดในช่วงนี้)**\n"
-    for name, total in sorted(summary.items(), key=lambda x: x[1], reverse=True):
+    for name in sorted(summary, key=normalize_name):
+        total = summary[name]
         msg += f"- {name}: {total} เคส\n"
+
 
     await ctx.send(msg)
 
