@@ -1,4 +1,4 @@
-name: Discord Notify
+name: Notify Discord
 
 on:
   push:
@@ -9,10 +9,37 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send message to Discord
+      - name: Send Discord Embed
         run: |
           curl -H "Content-Type: application/json" \
+          -X POST \
           -d '{
-            "content": "🚀 **Deploy Success**\n\n📦 Repo: **${{ github.repository }}**\n👤 By: **${{ github.actor }}**\n🔢 Commit: `${{ github.sha }}`"
+            "embeds": [
+              {
+                "title": "🤖 Case Bot Updated",
+                "description": "บอทนับเคสมีการอัปเดตเรียบร้อย",
+                "color": 3066993,
+                "fields": [
+                  {
+                    "name": "Repository",
+                    "value": "'"${{ github.repository }}"'",
+                    "inline": true
+                  },
+                  {
+                    "name": "Branch",
+                    "value": "'"${{ github.ref_name }}"'",
+                    "inline": true
+                  },
+                  {
+                    "name": "By",
+                    "value": "'"${{ github.actor }}"'",
+                    "inline": true
+                  }
+                ],
+                "footer": {
+                  "text": "Commit: ${{ github.sha }}"
+                }
+              }
+            ]
           }' \
           ${{ secrets.DISCORD_WEBHOOK }}
