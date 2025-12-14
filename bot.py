@@ -50,7 +50,7 @@ def save_case_pg(name, channel, case_type, cases, message_id):
                 cur.execute("""
                     INSERT INTO cases (date, name, channel, case_type, cases, message_id)
                     VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (message_id) DO NOTHING
+                    ON CONFLICT (message_id, name) DO NOTHING
                 """, (
                     datetime.now().date(),
                     name,
