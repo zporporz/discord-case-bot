@@ -7,7 +7,7 @@ import discord
 import psycopg2
 from datetime import datetime, timedelta
 from discord.ext import commands
-
+from audit.audit_commands import setup_audit_commands
 
 # ======================
 # ENV / CONSTANTS
@@ -441,8 +441,10 @@ async def confirm(ctx, password: str):
             cur.execute("TRUNCATE TABLE cases RESTART IDENTITY;")
 
     await ctx.send("🧨 ลบข้อมูลเรียบร้อย")
-
-
+# ======================
+# REGISTER AUDIT COMMANDS
+# ======================
+setup_audit_commands(bot, get_conn, is_pbt)
 # ======================
 # RUN
 # ======================
