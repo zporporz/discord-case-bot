@@ -37,6 +37,51 @@ def get_week_range_sun_sat():
         end.strftime("%Y-%m-%d")
     )
 
+import psycopg2
+
+def import_csv_once():
+    # ถ้าเซ็ตแล้ว แปลว่าเคย import ไปแล้ว
+    if os.getenv("CSV_IMPORTED") == "1":
+        print("ℹ️ CSV already imported, skip")
+        return
+
+    csv_path = "cases.csv"
+    if not os.path.exists(csv_path):
+        print("ℹ️ cases.csv not found, skip import")
+        return
+
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        print("❌ DATABASE_URL not found")
+        return
+
+    conn = psycopg2.connect(db_url)
+    cur = conn.cursor()
+
+    count = 0
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cur.execute("""
+                INSERT INTO cases (date, name, channel, cases, message_id)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (message_id) DO NOTHING
+            """, (
+                row["date"],
+                row["name"],
+                row["channel"],
+                int(row["cases"]),
+                row["message_id"]
+            ))
+            count += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print(f"✅ CSV imported into PostgreSQL: {count} rows")
+
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 PBT_ROLE_ID = 1393537553264545922  # <-- ใส่ Role ID ผบตร.
@@ -600,6 +645,5 @@ async def week(ctx, start: str = None, end: str = None):
 
     await ctx.send(msg)
 
-
-
+import_csv_once()
 bot.run(TOKEN)
