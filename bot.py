@@ -105,6 +105,7 @@ async def on_message(message):
     if message.author.bot or not message.mentions:
         return
 
+    # เลือกประเภทเคส
     if message.channel.id == CASE10_CHANNEL_ID:
         case_type = "case10"
         case_value = 2
@@ -114,13 +115,39 @@ async def on_message(message):
     else:
         return
 
-    for member in message.mentions:
+    # ======================
+    # กัน mention ซ้ำ
+    # ======================
+    mentions = message.mentions
+    unique_members = set(mentions)
+
+    # 🔍 log ถ้ามีการแท็กซ้ำ
+    if len(mentions) != len(unique_members):
+        print(
+            f"⚠️ Duplicate mentions detected | "
+            f"message_id={message.id} | "
+            f"mentions={len(mentions)} unique={len(unique_members)}"
+        )
+
+    # ======================
+    # บันทึกเคส
+    # ======================
+    for member in unique_members:
         save_case_pg(
             member.display_name,
             message.channel.name,
             case_type,
             case_value,
             message.id
+        )
+
+        # ✅ log รายคน
+        print(
+            f"✅ Saved case | "
+            f"name={member.display_name} | "
+            f"type={case_type} | "
+            f"+{case_value} | "
+            f"message_id={message.id}"
         )
         
 @bot.event
@@ -147,14 +174,18 @@ async def on_message_edit(before, after):
     # 1️⃣ log ตอนเริ่มจับ edit
     print(f"✏️ Message edited: {after.id}")
 
-    # 2️⃣ ลบเคสเก่าของข้อความนี้
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM cases WHERE message_id = %s",
-                (str(after.id),)
-            )
-    print(f"🗑️ Deleted old cases for message {after.id}")
+    # 2️⃣ ลบเคสเก่าของข้อความนี้ทั้งหมด
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM cases WHERE message_id = %s",
+                    (str(after.id),)
+                )
+        print(f"🗑️ Deleted old cases for message {after.id}")
+    except Exception as e:
+        print("❌ DB delete error (edit):", e)
+        return
 
     # ถ้าแก้แล้วไม่มี mention → แปลว่าลบเคสทั้งหมด
     if not after.mentions:
@@ -172,8 +203,23 @@ async def on_message_edit(before, after):
         print(f"⚠️ Edited message {after.id} in unsupported channel")
         return
 
-    # 4️⃣ insert ใหม่ตาม mention ล่าสุด
-    for member in after.mentions:
+    # ======================
+    # 4️⃣ กัน mention ซ้ำ
+    # ======================
+    mentions = after.mentions
+    unique_members = set(mentions)
+
+    if len(mentions) != len(unique_members):
+        print(
+            f"⚠️ Duplicate mentions after edit | "
+            f"message_id={after.id} | "
+            f"mentions={len(mentions)} unique={len(unique_members)}"
+        )
+
+    # ======================
+    # 5️⃣ insert ใหม่ตาม mention ล่าสุด
+    # ======================
+    for member in unique_members:
         save_case_pg(
             member.display_name,
             after.channel.name,
@@ -181,7 +227,15 @@ async def on_message_edit(before, after):
             case_value,
             after.id
         )
-        print(f"✅ Re-saved after edit: {member.display_name}")
+
+        print(
+            f"✅ Re-saved after edit | "
+            f"name={member.display_name} | "
+            f"type={case_type} | "
+            f"+{case_value} | "
+            f"message_id={after.id}"
+        )
+
 
 # ======================
 # COMMANDS
