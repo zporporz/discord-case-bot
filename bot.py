@@ -144,16 +144,24 @@ async def on_message_edit(before, after):
     if after.author.bot:
         return
 
+    # 1️⃣ log ตอนเริ่มจับ edit
+    print(f"✏️ Message edited: {after.id}")
+
+    # 2️⃣ ลบเคสเก่าของข้อความนี้
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM cases WHERE message_id = %s",
                 (str(after.id),)
             )
+    print(f"🗑️ Deleted old cases for message {after.id}")
 
+    # ถ้าแก้แล้วไม่มี mention → แปลว่าลบเคสทั้งหมด
     if not after.mentions:
+        print(f"ℹ️ No mentions left in message {after.id}, skip insert")
         return
 
+    # 3️⃣ หา case type ใหม่
     if after.channel.id == CASE10_CHANNEL_ID:
         case_type = "case10"
         case_value = 2
@@ -161,8 +169,10 @@ async def on_message_edit(before, after):
         case_type = "normal"
         case_value = 1
     else:
+        print(f"⚠️ Edited message {after.id} in unsupported channel")
         return
 
+    # 4️⃣ insert ใหม่ตาม mention ล่าสุด
     for member in after.mentions:
         save_case_pg(
             member.display_name,
@@ -171,6 +181,7 @@ async def on_message_edit(before, after):
             case_value,
             after.id
         )
+        print(f"✅ Re-saved after edit: {member.display_name}")
 
 # ======================
 # COMMANDS
