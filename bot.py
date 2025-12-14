@@ -204,7 +204,13 @@ async def today(ctx):
                 FROM cases
                 WHERE date = %s
                 GROUP BY name, case_type
-                ORDER BY regexp_replace(name, '^\+?\d+\s*\[.*?\]\s*', '', 'g')
+                ORDER BY regexp_replace(
+                    name,
+                    r'^\+?\d+\s*\[.*?\]\s*',
+                    '',
+                    'g'
+                )
+
             """, (today,))
             rows = cur.fetchall()
 
@@ -279,7 +285,12 @@ async def date(ctx, date_str: str):
                 FROM cases
                 WHERE date = %s
                 GROUP BY name, case_type
-                ORDER BY regexp_replace(name, '^\+?\d+\s*\[.*?\]\s*', '', 'g')
+                ORDER BY regexp_replace(
+                    name,
+                    r'^\+?\d+\s*\[.*?\]\s*',
+                    '',
+                    'g'
+                )
             """, (target,))
             rows = cur.fetchall()
 
