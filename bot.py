@@ -343,6 +343,99 @@ async def week(ctx):
     
 @bot.command()
 async def cmd(ctx, section: str = None):
+
+@bot.command()
+async def check(ctx, *, keyword: str = None):
+    if not keyword:
+        await ctx.send("❌ ใช้คำสั่ง: `!check ชื่อ`")
+        return
+
+    today = datetime.now().date()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT name, case_type, COUNT(*), COALESCE(SUM(cases),0)
+                FROM cases
+                WHERE date = %s
+                  AND name ILIKE %s
+                GROUP BY name, case_type
+                ORDER BY name
+            """, (today, f"%{keyword}%"))
+            rows = cur.fetchall()
+
+    if not rows:
+        await ctx.send(f"📭 วันนี้ไม่พบคดีของชื่อที่มีคำว่า **{keyword}**")
+        return
+
+    msg = f"🔍 **ผลการค้นหา '{keyword}' (วันนี้)**\n\n"
+
+    data = {}
+    for name, ctype, inc, total in rows:
+        if name not in data:
+            data[name] = {}
+        data[name][ctype] = (inc, total)
+
+    for name, info in data.items():
+        msg += f"👮 **{name}**\n"
+        if "normal" in info:
+            i, t = info["normal"]
+            msg += f"🟦 คดีปกติ: {i} คดี ({t} เคส)\n"
+        if "case10" in info:
+            i, t = info["case10"]
+            msg += f"🟥 คดีจุด 10: {i} คดี ({t} เคส)\n"
+        msg += "\n"
+
+    await ctx.send(msg)
+
+@bot.command()
+async def checkdate(ctx, date_str: str = None, *, keyword: str = None):
+    if not date_str or not keyword:
+        await ctx.send("❌ ใช้คำสั่ง: `!checkdate DD/MM ชื่อ`")
+        return
+
+    try:
+        d, m = map(int, date_str.split("/"))
+        y = datetime.now().year
+        target_date = datetime(y, m, d).date()
+    except:
+        await ctx.send("❌ รูปแบบวันที่ไม่ถูกต้อง ใช้ `DD/MM`")
+        return
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT name, case_type, COUNT(*), COALESCE(SUM(cases),0)
+                FROM cases
+                WHERE date = %s
+                  AND name ILIKE %s
+                GROUP BY name, case_type
+                ORDER BY name
+            """, (target_date, f"%{keyword}%"))
+            rows = cur.fetchall()
+
+    if not rows:
+        await ctx.send(f"📭 ไม่พบคดีของชื่อที่มีคำว่า **{keyword}** ในวันที่ {date_str}")
+        return
+
+    msg = f"🔍 **ผลการค้นหา '{keyword}' วันที่ {date_str}**\n\n"
+
+    data = {}
+    for name, ctype, inc, total in rows:
+        data.setdefault(name, {})[ctype] = (inc, total)
+
+    for name, info in data.items():
+        msg += f"👮 **{name}**\n"
+        if "normal" in info:
+            i, t = info["normal"]
+            msg += f"🟦 คดีปกติ: {i} คดี ({t} เคส)\n"
+        if "case10" in info:
+            i, t = info["case10"]
+            msg += f"🟥 คดีจุด 10: {i} คดี ({t} เคส)\n"
+        msg += "\n"
+
+    await ctx.send(msg)
+    
     # ======================
     # CMD ทั่วไป
     # ======================
@@ -353,7 +446,9 @@ async def cmd(ctx, section: str = None):
             "`!today` — สรุปคดีวันนี้ (แยกคดีปกติ / จุด 10)\n"
             "`!me` — ดูคดีของตัวเองวันนี้ (แยกประเภท)\n"
             "`!date DD/MM` — ดูคดีย้อนหลังตามวันที่\n"
-            "`!week` — สรุปคดีประจำสัปดาห์ (อาทิตย์–เสาร์)\n\n"
+            "`!week` — สรุปคดีประจำสัปดาห์ (อาทิตย์–เสาร์)\n"
+            "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (เฉพาะวันนี้)\n"
+            "`!checkdate DD/MM ชื่อ` — 🔍 เช็กคดีของบุคคลตามวันที่\n\n"
             "🛠️ พิมพ์ `!cmd admin` สำหรับคำสั่งผู้บังคับบัญชา"
         )
         await ctx.send(msg)
