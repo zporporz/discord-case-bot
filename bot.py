@@ -5,6 +5,40 @@ import discord
 from discord.ext import commands
 from datetime import timedelta
 import re
+import psycopg2
+
+def save_case_pg(name, channel, cases, message_id):
+    db_url = os.getenv("DATABASE_URL")
+
+    if not db_url:
+        print("❌ DATABASE_URL not found")
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO cases (date, name, channel, cases, message_id)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (message_id) DO NOTHING
+        """, (
+            datetime.now().strftime("%Y-%m-%d"),
+            name,
+            channel,
+            cases,
+            str(message_id)
+        ))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        print(f"✅ Saved to DB: {name} +{cases}")
+
+    except Exception as e:
+        print("❌ DB error:", e)
+
 
 def normalize_name(name: str):
     # ตัด +xxx, [GRPL], emoji คร่าว ๆ
@@ -36,8 +70,6 @@ def get_week_range_sun_sat():
         start.strftime("%Y-%m-%d"),
         end.strftime("%Y-%m-%d")
     )
-
-import psycopg2
 
 def import_csv_once():
     # ถ้าเซ็ตแล้ว แปลว่าเคย import ไปแล้ว
@@ -254,8 +286,18 @@ async def on_message(message):
 
 
     for member in mentions:
-        print(f"{member.display_name} +{case_value} เคส")
-        save_case(
+    print(f"{member.display_name} +{case_value} เคส")
+
+    # ✅ STEP 2: เขียนลง PostgreSQL
+    save_case_pg(
+        member.display_name,
+        message.channel.name,
+        case_value,
+        message.id
+    )
+
+    # (ยังเก็บ CSV ไว้ก่อน)
+    save_case(
         member.display_name,
         message.channel.name,
         case_type,
