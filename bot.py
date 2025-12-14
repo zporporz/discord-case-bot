@@ -75,27 +75,29 @@ def remove_case_by_message_id(message_id):
     with open("cases.csv", "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["date", "name", "channel", "cases", "message_id"]
+            fieldnames=["date", "name", "channel", "case_type", "cases", "message_id"]
         )
         writer.writeheader()
         writer.writerows(rows)
 
-def save_case(name, channel, cases, message_id):
+def save_case(name, channel, case_type, cases, message_id):
     file_exists = os.path.exists("cases.csv")
 
     with open("cases.csv", "a", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
 
         if not file_exists:
-            writer.writerow(["date", "name", "channel", "cases", "message_id"])
+            writer.writerow(["date", "name", "channel", "case_type", "cases", "message_id"])
 
         writer.writerow([
             datetime.now().strftime("%Y-%m-%d"),
             name,
             channel,
+            case_type,   # 👈 เพิ่ม
             cases,
             str(message_id)
         ])
+
 
 def load_processed():
     if not os.path.exists(PROCESSED_FILE):
@@ -155,16 +157,20 @@ async def on_message_edit(before, after):
 
     if after.channel.id == CASE10_CHANNEL_ID:
         case_value = 2
+        case_type = "case10"
     else:
         case_value = 1
+        case_type = "normal"
 
     for member in mentions:
         save_case(
             member.display_name,
             after.channel.name,
+            case_type,
             case_value,
             after.id
         )
+
 
     print(f"✏️ แก้ไขเคสใหม่จาก message_id = {after.id}")
       
@@ -194,16 +200,20 @@ async def on_message(message):
 
     if message.channel.id == CASE10_CHANNEL_ID:
         case_value = 2
+        case_type = "case10"
     elif message.channel.id in NORMAL_CHANNEL_IDS:
         case_value = 1
+        case_type = "normal"
     else:
         return
+
 
     for member in mentions:
         print(f"{member.display_name} +{case_value} เคส")
         save_case(
         member.display_name,
         message.channel.name,
+        case_type,
         case_value,
         message.id
     )
@@ -268,8 +278,12 @@ async def cmd(ctx, section: str = None):
    
 @bot.command()
 async def today(ctx):
-    today = datetime.now().strftime("%Y-%m-%d")
-    summary = {}
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    summary = {
+        "normal": {},
+        "case10": {}
+    }
 
     if not os.path.exists("cases.csv"):
         await ctx.send("ยังไม่มีข้อมูลเคส")
@@ -278,28 +292,59 @@ async def today(ctx):
     with open("cases.csv", "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row["date"] == today and row.get("message_id") not in deleted_messages:
-                name = row["name"]
-                cases = int(row["cases"])
-                summary[name] = summary.get(name, 0) + cases
 
-    if not summary:
+            if row.get("message_id") in deleted_messages:
+                continue
+
+            if row["date"] != today_str:
+                continue
+
+            name = row["name"]
+            case_type = row.get("case_type", "normal")
+            cases = int(row["cases"])
+
+            if case_type not in summary:
+                continue
+
+            if name not in summary[case_type]:
+                summary[case_type][name] = {
+                    "cases": 0,
+                    "incidents": 0
+                }
+
+            summary[case_type][name]["cases"] += cases
+            summary[case_type][name]["incidents"] += 1
+
+    if not summary["normal"] and not summary["case10"]:
         await ctx.send("วันนี้ยังไม่มีเคส")
         return
 
-    msg = "📊 **สรุปเคสวันนี้**\n"
-    for name in sorted(summary, key=normalize_name):
-        total = summary[name]
-        msg += f"- {name}: {total} เคส\n"
+    msg = "📊 **สรุปคดีวันนี้**\n\n"
 
+    if summary["normal"]:
+        msg += "🟦 **คดีปกติ**\n"
+        for name in sorted(summary["normal"], key=normalize_name):
+            data = summary["normal"][name]
+            msg += f"- {name}: {data['incidents']} คดี ({data['cases']} เคส)\n"
+        msg += "\n"
+
+    if summary["case10"]:
+        msg += "🟥 **คดีจุด 10**\n"
+        for name in sorted(summary["case10"], key=normalize_name):
+            data = summary["case10"][name]
+            msg += f"- {name}: {data['incidents']} คดี ({data['cases']} เคส)\n"
 
     await ctx.send(msg)
+
+
 
 @bot.command()
 async def me(ctx):
     today = datetime.now().strftime("%Y-%m-%d")
     my_name = ctx.author.display_name
-    total = 0
+
+    incidents = 0   # จำนวนคดี
+    cases_total = 0 # จำนวนเคส
 
     if not os.path.exists("cases.csv"):
         await ctx.send("ยังไม่มีข้อมูลเคส")
@@ -313,9 +358,18 @@ async def me(ctx):
                 and row["name"] == my_name
                 and row.get("message_id") not in deleted_messages
             ):
-                total += int(row["cases"])
+                incidents += 1
+                cases_total += int(row["cases"])
 
-    await ctx.send(f"👮 {my_name} วันนี้ได้ {total} เคส")
+    if incidents == 0:
+        await ctx.send(f"👮 {my_name}\nวันนี้ยังไม่มีคดี")
+        return
+
+    await ctx.send(
+        f"👮 {my_name}\n"
+        f"วันนี้ทำ {incidents} คดี ({cases_total} เคส)"
+    )
+
 
 @bot.command()
 async def date(ctx, date_str: str):
@@ -348,19 +402,27 @@ async def date(ctx, date_str: str):
             ):
                 name = row["name"]
                 cases = int(row["cases"])
-                summary[name] = summary.get(name, 0) + cases
+
+                if name not in summary:
+                    summary[name] = {
+                        "cases": 0,
+                        "incidents": 0
+                    }
+
+                summary[name]["cases"] += cases
+                summary[name]["incidents"] += 1
 
     if not summary:
-        await ctx.send(f"📅 วันที่ {date_str} ไม่มีเคส")
+        await ctx.send(f"📅 วันที่ {date_str} ไม่มีคดี")
         return
 
-    msg = f"📊 **สรุปเคสวันที่ {date_str}**\n"
+    msg = f"📊 **สรุปคดีวันที่ {date_str}**\n"
     for name in sorted(summary, key=normalize_name):
-        total = summary[name]
-        msg += f"- {name}: {total} เคส\n"
-
+        data = summary[name]
+        msg += f"- {name}: {data['incidents']} คดี ({data['cases']} เคส)\n"
 
     await ctx.send(msg)
+
     
 def is_pbt():
     async def predicate(ctx):
@@ -467,11 +529,10 @@ async def week(ctx, start: str = None, end: str = None):
         await ctx.send("❌ ใช้ `!week` หรือ `!week DD/MM DD/MM`")
         return
 
-    # แปลงเป็น date object
     start_d = datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_d = datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    # ====== รวมเคส ======
+    # ====== รวมข้อมูล ======
     summary = {}
 
     with open("cases.csv", "r", encoding="utf-8-sig") as f:
@@ -482,26 +543,32 @@ async def week(ctx, start: str = None, end: str = None):
                 continue
 
             try:
-                row_date = datetime.strptime(
-                    row["date"].replace("\ufeff", "").strip(),
-                    "%Y-%m-%d"
-                ).date()
+                row_date = datetime.strptime(row["date"].strip(), "%Y-%m-%d").date()
             except:
                 continue
 
             if start_d <= row_date <= end_d:
                 name = row["name"]
                 cases = int(row["cases"])
-                summary[name] = summary.get(name, 0) + cases
+
+                if name not in summary:
+                    summary[name] = {
+                        "cases": 0,
+                        "incidents": 0
+                    }
+
+                summary[name]["cases"] += cases
+                summary[name]["incidents"] += 1
 
     if not summary:
         await ctx.send("ไม่มีข้อมูลในช่วงนี้")
         return
 
-    # ====== แบ่งกลุ่ม ======
+    # ====== แบ่งกลุ่มตามเคส ======
     group_500, group_400, group_300 = [], [], []
 
-    for name, total in summary.items():
+    for name, data in summary.items():
+        total = data["cases"]
         if total >= 500:
             group_500.append((name, total))
         elif total >= 400:
@@ -526,14 +593,13 @@ async def week(ctx, start: str = None, end: str = None):
     add_group("🔥 500+ เคส", group_500)
     add_group("💪 400+ เคส", group_400)
     add_group("✅ 300+ เคส", group_300)
-    
+
     msg += "**📋 รวมทุกนาย (ทั้งหมดในช่วงนี้)**\n"
     for name in sorted(summary, key=normalize_name):
-        total = summary[name]
-        msg += f"- {name}: {total} เคส\n"
-
+        msg += f"- {name}: {summary[name]['cases']} เคส\n"
 
     await ctx.send(msg)
+
 
 
 bot.run(TOKEN)
