@@ -122,7 +122,55 @@ async def on_message(message):
             case_value,
             message.id
         )
+        
+@bot.event
+async def on_message_delete(message):
+    if message.author.bot:
+        return
 
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM cases WHERE message_id = %s",
+                    (str(message.id),)
+                )
+        print(f"🗑️ Deleted cases for message {message.id}")
+    except Exception as e:
+        print("❌ DB delete error:", e)
+
+@bot.event
+async def on_message_edit(before, after):
+    if after.author.bot:
+        return
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM cases WHERE message_id = %s",
+                (str(after.id),)
+            )
+
+    if not after.mentions:
+        return
+
+    if after.channel.id == CASE10_CHANNEL_ID:
+        case_type = "case10"
+        case_value = 2
+    elif after.channel.id in NORMAL_CHANNEL_IDS:
+        case_type = "normal"
+        case_value = 1
+    else:
+        return
+
+    for member in after.mentions:
+        save_case_pg(
+            member.display_name,
+            after.channel.name,
+            case_type,
+            case_value,
+            after.id
+        )
 
 # ======================
 # COMMANDS
