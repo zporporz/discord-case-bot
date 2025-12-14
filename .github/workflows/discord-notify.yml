@@ -1,4 +1,4 @@
-name: Notify Discord
+name: Discord Notify
 
 on:
   push:
@@ -8,38 +8,40 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
+
     steps:
       - name: Send Discord Embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
         run: |
-          curl -H "Content-Type: application/json" \
-          -X POST \
+          curl -X POST -H "Content-Type: application/json" \
           -d '{
-            "embeds": [
-              {
-                "title": "🤖 Case Bot Updated",
-                "description": "บอทนับเคสมีการอัปเดตเรียบร้อย",
-                "color": 3066993,
-                "fields": [
-                  {
-                    "name": "Repository",
-                    "value": "'"${{ github.repository }}"'",
-                    "inline": true
-                  },
-                  {
-                    "name": "Branch",
-                    "value": "'"${{ github.ref_name }}"'",
-                    "inline": true
-                  },
-                  {
-                    "name": "By",
-                    "value": "'"${{ github.actor }}"'",
-                    "inline": true
-                  }
-                ],
-                "footer": {
-                  "text": "Commit: ${{ github.sha }}"
+            "embeds": [{
+              "title": "🚀 Push to main",
+              "color": 3066993,
+              "fields": [
+                {
+                  "name": "📦 Repository",
+                  "value": "'"$REPO"'",
+                  "inline": true
+                },
+                {
+                  "name": "👤 By",
+                  "value": "'"$ACTOR"'",
+                  "inline": true
+                },
+                {
+                  "name": "📝 Commit",
+                  "value": "'"$COMMIT_MSG"'"
+                },
+                {
+                  "name": "🔗 Link",
+                  "value": "[View Commit]('"$COMMIT_URL"')"
                 }
-              }
-            ]
-          }' \
-          ${{ secrets.DISCORD_WEBHOOK }}
+              ]
+            }]
+          }' $DISCORD_WEBHOOK
