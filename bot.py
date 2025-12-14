@@ -5,11 +5,25 @@ import psycopg2
 from datetime import datetime, timedelta
 from discord.ext import commands
 
+
+# ======================
+# PERMISSION CHECK  
+# ======================
+def is_pbt():
+    async def predicate(ctx):
+        return any(role.id == PBT_ROLE_ID for role in ctx.author.roles)
+    return commands.check(predicate)
 # ======================
 # Database
 # ======================
 DATABASE_URL = os.getenv("DATABASE_URL")
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+def get_conn():
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL not set")
+    return psycopg2.connect(db_url)
 
 def save_case_pg(name, channel, case_type, cases, message_id):
     db_url = os.getenv("DATABASE_URL")
