@@ -42,7 +42,7 @@ import psycopg2
 def import_csv_once():
     # ถ้าเซ็ตแล้ว แปลว่าเคย import ไปแล้ว
     if os.getenv("CSV_IMPORTED") == "1":
-        print("ℹ️ CSV already imported, skip")
+        print("🔒 CSV system disabled (CSV_IMPORTED=1)")
         return
 
     csv_path = "cases.csv"
