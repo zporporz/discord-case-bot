@@ -11,20 +11,69 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # สำคัญ: ต้องมี commit ก่อนหน้า
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies (if any)
+      - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
 
-      - name: Syntax check (py_compile)
+      - name: Syntax check
         run: |
           python -m py_compile *.py
+
+      # ===== หาไฟล์ที่เปลี่ยน =====
+      - name: Get changed files
+        id: changes
+        run: |
+          FILES=$(git diff --name-only HEAD~1 HEAD | head -n 10)
+          FILES_ESCAPED=$(printf "%s\n" "$FILES" | sed 's/"/\\"/g')
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES_ESCAPED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ===== แจ้ง Discord =====
+      - name: Notify Discord (CI Result)
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FILES: ${{ steps.changes.outputs.files }}
+        run: |
+          if [ "$STATUS" = "success" ]; then
+            TITLE="✅ CI Passed"
+            COLOR=3066993
+          else
+            TITLE="❌ CI Failed"
+            COLOR=15158332
+          fi
+
+          if [ -z "$FILES" ]; then
+            FILES_TEXT="(no file changes detected)"
+          else
+            FILES_TEXT=$(echo "$FILES" | sed 's/^/- /')
+          fi
+
+          curl -X POST -H "Content-Type: application/json" \
+          -d "{
+            \"embeds\": [{
+              \"title\": \"$TITLE\",
+              \"color\": $COLOR,
+              \"fields\": [
+                { \"name\": \"📦 Repo\", \"value\": \"$REPO\", \"inline\": true },
+                { \"name\": \"👤 By\", \"value\": \"$ACTOR\", \"inline\": true },
+                { \"name\": \"📁 Changed files\", \"value\": \"\n$FILES_TEXT\" },
+                { \"name\": \"🔎 CI Logs\", \"value\": \"[View Details]($RUN_URL)\" }
+              ]
+            }]
+          }" $DISCORD_WEBHOOK
