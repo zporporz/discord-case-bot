@@ -2,54 +2,26 @@
 from discord.ext import commands
 from audit.audit_helpers import find_duplicate_person_in_message
 
-
 def setup_audit_commands(bot, get_conn, is_pbt):
-    bot.add_command(audit_person)
 
-    @bot.command()
+    @commands.command(name="audit")
     @is_pbt()
-    async def audit(ctx, section: str = None):
-        if section is None:
-            await ctx.send(
-                "🧪 **Audit Commands**\n\n"
-                "`!audit dup` — ตรวจ message ซ้ำ\n"
-                "`!audit person` — ตรวจคนซ้ำใน message เดียว\n"
-                "`!audit old` — ตรวจเคสเก่า (เสี่ยง edit ข้ามวัน)"
-            )
+    async def audit_person(ctx, section: str = None):
+        if section is None or section.lower() != "person":
+            await ctx.send("ใช้ `!audit person`")
             return
 
-        if section == "dup":
-            rows = audit.find_duplicate_messages()
-            if not rows:
-                await ctx.send("✅ ไม่พบ message ซ้ำ")
-                return
+        rows = find_duplicate_person_in_message(get_conn)
 
-            msg = "⚠️ **พบ message_id ซ้ำ**\n"
-            for mid, count in rows:
-                msg += f"- message_id `{mid}` : {count} records\n"
-            await ctx.send(msg)
+        if not rows:
+            await ctx.send("✅ ไม่พบการแท็กซ้ำ")
+            return
 
-        elif section == "person":
-            rows = find_duplicate_person_in_message(get_conn)
-            if not rows:
-                await ctx.send("✅ ไม่พบคนซ้ำใน message เดียว")
-                return
+        msg = "🚨 **พบการแท็กชื่อซ้ำในข้อความเดียวกัน**\n\n"
+        for message_id, name, count in rows:
+            msg += f"- {name} | msg={message_id} | {count} ครั้ง\n"
 
-            msg = "⚠️ **พบคนซ้ำใน message เดียว**\n"
-            for mid, name, count in rows:
-                msg += f"- {name} | message `{mid}` : {count}\n"
-            await ctx.send(msg)
+        await ctx.send(msg)
 
-        elif section == "old":
-            rows = audit.find_old_cases()
-            if not rows:
-                await ctx.send("✅ ไม่มีเคสเก่า")
-                return
-
-            msg = "⚠️ **เคสเก่า (เสี่ยงโดนแก้ย้อนหลัง)**\n"
-            for _, name, date, mid in rows[:10]:
-                msg += f"- {name} | {date} | `{mid}`\n"
-            await ctx.send(msg)
-
-        else:
-            await ctx.send("❌ ไม่รู้จัก audit section")
+    # ❗ สำคัญมาก: add หลังจากประกาศฟังก์ชันแล้ว
+    bot.add_command(audit_person)
