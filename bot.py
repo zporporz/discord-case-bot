@@ -157,6 +157,25 @@ async def on_message_delete(message):
     if message.author.bot:
         return
 
+    # 🔒 สนใจเฉพาะห้องคดี
+    if message.channel.id not in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
+        return
+
+    deleted_by = "unknown"
+
+    # 🔍 ดึง audit log เพื่อดูว่าใครลบ
+    try:
+        async for entry in message.guild.audit_logs(
+            limit=5,
+            action=discord.AuditLogAction.message_delete
+        ):
+            # เช็กว่าเป็นข้อความนี้ไหม (ใกล้เวลา)
+            if entry.target.id == message.author.id:
+                deleted_by = entry.user.display_name
+                break
+    except Exception:
+        pass  # ไม่มี permission ก็ไม่พัง
+
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -164,10 +183,20 @@ async def on_message_delete(message):
                     "DELETE FROM cases WHERE message_id = %s",
                     (str(message.id),)
                 )
-        print(f"🗑️ Deleted cases | msg={message.id}")
+                deleted = cur.rowcount
+
+        if deleted > 0:
+            print(
+                "🗑️ Deleted cases | "
+                f"msg={message.id} | "
+                f"channel={message.channel.name} | "
+                f"author={message.author.display_name} | "
+                f"deleted_by={deleted_by} | "
+                f"rows={deleted}"
+            )
+
     except Exception as e:
         print("❌ DB delete error:", e)
-
 
 @bot.event
 async def on_message_edit(before, after):
