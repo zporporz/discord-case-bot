@@ -151,7 +151,6 @@ async def on_message(message):
             message_date
         )
 
-
 @bot.event
 async def on_message_delete(message):
     if message.author.bot:
@@ -161,20 +160,23 @@ async def on_message_delete(message):
     if message.channel.id not in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
         return
 
-    deleted_by = "unknown"
+    delete_type = "🧑‍✈️ self-delete"
+    deleted_by = message.author.display_name
 
-    # 🔍 ดึง audit log เพื่อดูว่าใครลบ
+    # 🔍 พยายามดู audit log (ถ้ามี)
     try:
         async for entry in message.guild.audit_logs(
             limit=5,
             action=discord.AuditLogAction.message_delete
         ):
-            # เช็กว่าเป็นข้อความนี้ไหม (ใกล้เวลา)
+            # audit log จะอ้างถึง "คนที่โดนลบข้อความ"
             if entry.target.id == message.author.id:
+                delete_type = "🛡️ mod-delete"
                 deleted_by = entry.user.display_name
                 break
     except Exception:
-        pass  # ไม่มี permission ก็ไม่พัง
+        delete_type = "❓ unknown"
+        deleted_by = "unknown"
 
     try:
         with get_conn() as conn:
@@ -185,9 +187,10 @@ async def on_message_delete(message):
                 )
                 deleted = cur.rowcount
 
+        # log เฉพาะตอนลบเคสจริง
         if deleted > 0:
             print(
-                "🗑️ Deleted cases | "
+                f"{delete_type} | "
                 f"msg={message.id} | "
                 f"channel={message.channel.name} | "
                 f"author={message.author.display_name} | "
