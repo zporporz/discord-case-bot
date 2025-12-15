@@ -376,11 +376,6 @@ async def on_message_edit(before, after):
     if after.author.bot:
         return
 
-    # ใช้เวลาไทย
-    if after.created_at.astimezone(TH_TZ).date() != today_th():
-        print(f"⛔ Ignore edit (old message) | msg={after.id}")
-        return
-
     print(f"✏️ Message edited | msg={after.id}")
 
     # 1️⃣ ลบเคสเดิมทั้งหมดของ message นี้
