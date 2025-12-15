@@ -10,6 +10,8 @@ from discord.ext import commands
 from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
+ALLOWED_COMMAND_CHANNEL_ID = 1449425399397482789
+
 
 # ======================
 # ENV / CONSTANTS
@@ -179,6 +181,25 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+@bot.check
+async def restrict_commands_to_channel(ctx):
+    # ไม่ให้ใช้ใน DM
+    if ctx.guild is None:
+        return False
+
+    # อนุญาตเฉพาะห้องที่กำหนด
+    if ctx.channel.id != ALLOWED_COMMAND_CHANNEL_ID:
+        return False
+
+    return True
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send(
+            "❌ ใช้คำสั่งบอทได้เฉพาะห้องที่กำหนดเท่านั้น",
+            delete_after=5
+        )
 
 # ======================
 # EVENTS
@@ -225,12 +246,22 @@ async def backfill_recent_cases(limit_per_channel=50):
 
 @bot.event
 async def on_message(message):
+    # 1️⃣ ให้บอทประมวลผลคำสั่งก่อน
     await bot.process_commands(message)
 
-    if message.author.bot or not message.mentions:
+    # 2️⃣ ข้าม bot
+    if message.author.bot:
         return
 
-    # เลือกประเภทเคส
+    # 3️⃣ ถ้าเป็นคำสั่ง (ขึ้นต้นด้วย !) ไม่เอาไปนับเคส
+    if message.content.startswith("!"):
+        return
+
+    # 4️⃣ ไม่มี mention ก็ไม่ใช่เคส
+    if not message.mentions:
+        return
+
+    # 5️⃣ เลือกประเภทเคส
     if message.channel.id == CASE10_CHANNEL_ID:
         case_type = "case10"
         case_value = 2
@@ -625,12 +656,10 @@ async def week(ctx):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send(
-            embed=Embed(
-                description="📭 ไม่มีข้อมูลในสัปดาห์นี้",
-                color=0x2f3136
-            )
-        )
+        await ctx.send(embed=Embed(
+            description="📭 ไม่มีข้อมูลในสัปดาห์นี้",
+            color=0x2f3136
+        ))
         return
 
     embed = Embed(
@@ -642,6 +671,7 @@ async def week(ctx):
     summary = {}
     total_cases_all = 0
 
+    # รวมข้อมูล
     for name, ctype, inc, total in rows:
         if name not in summary:
             summary[name] = {
@@ -652,20 +682,33 @@ async def week(ctx):
             }
 
         if ctype == "normal":
-            summary[name]["normal_posts"] += inc
             summary[name]["normal_cases"] += total
+            summary[name]["normal_posts"] += inc
         else:
-            summary[name]["point10_posts"] += inc
             summary[name]["point10_cases"] += total
+            summary[name]["point10_posts"] += inc
 
         total_cases_all += total
 
+    # แสดงผลรายคน
     for name, data in summary.items():
         value = ""
+
         if data["normal_cases"] > 0:
-            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+            value += (
+                f"📂 คดีปกติ: {data['normal_cases']} เคส "
+                f"({data['normal_posts']} คดี)\n"
+            )
+
         if data["point10_cases"] > 0:
-            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
+            value += (
+                f"🚨 คดีจุด 10: {data['point10_cases']} เคส "
+                f"({data['point10_posts']} คดี)\n"
+            )
+
+        # ✅ รวมทั้งหมดต่อคน (ตัวหนา)
+        total_person = data["normal_cases"] + data["point10_cases"]
+        value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
 
         embed.add_field(
             name=f"👤 {name}",
@@ -673,14 +716,13 @@ async def week(ctx):
             inline=False
         )
 
-    embed.set_footer(
-        text=(
-            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
-            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
-        )
-    )
+    embed.set_footer(text=(
+        f"📊 รวมทั้งหมดทั้งระบบ: {total_cases_all} เคส\n"
+        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+    ))
 
     await ctx.send(embed=embed)
+
 
 @bot.command()
 async def check(ctx, *, keyword: str = None):
