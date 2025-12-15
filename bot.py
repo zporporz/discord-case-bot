@@ -397,18 +397,12 @@ async def week(ctx):
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT name, case_type, COUNT(*), COALESCE(SUM(cases),0)
-                FROM cases
-                WHERE date BETWEEN %s AND %s
-                GROUP BY name, case_type
-                ORDER BY regexp_replace(
-                    name,
-                    '^\+?\d+\s*\[.*?\]\s*',
-                    '',
-                    'g'
-                )
+            cur.execute(r"""
+                ...
+                '^\+?\d+\s*\[.*?\]\s*'
+                ...
             """, (start, end))
+
             rows = cur.fetchall()
 
     if not rows:
