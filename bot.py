@@ -743,10 +743,10 @@ async def check(ctx, *, keyword: str = None):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=(
-        f"📊 รวมทั้งหมด: {total_posts_all} คดี | "
-        f"📂 {total_normal_posts} | 🚨 {total_point10_posts}"
+    embed.set_footer(
+    text=f"📊 รวมทั้งหมด: {total_posts_all} คดี | 📂 {total_normal_posts} | 🚨 {total_point10_posts}"
     )
+
 
     await ctx.send(embed=embed)
 
@@ -811,9 +811,8 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=(
-        f"📊 รวมทั้งหมด: {total_posts_all} คดี | "
-        f"📂 {total_normal_posts} | 🚨 {total_point10_posts}"
+    embed.set_footer(
+    text=f"📊 รวมทั้งหมด: {total_posts_all} คดี | 📂 {total_normal_posts} | 🚨 {total_point10_posts}"
     )
 
     await ctx.send(embed=embed)
