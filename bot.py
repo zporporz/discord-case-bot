@@ -556,6 +556,68 @@ async def check(ctx, *, keyword: str = None):
 
     await ctx.send(embed=embed)
 
+@bot.command()
+async def checkdate(ctx, date_str: str, *, keyword: str):
+    try:
+        d, m = map(int, date_str.split("/"))
+        y = datetime.now().year
+        target = datetime(y, m, d).date()
+    except:
+        await ctx.send("❌ ใช้ `!checkdate DD/MM ชื่อ`")
+        return
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT name, case_type, COUNT(*), SUM(cases)
+                FROM cases
+                WHERE date = %s AND name ILIKE %s
+                GROUP BY name, case_type
+            """, (target, f"%{keyword}%"))
+            rows = cur.fetchall()
+
+    if not rows:
+        await ctx.send("ไม่พบข้อมูล")
+        return
+
+    embed = Embed(
+        title="🔍 ผลการค้นหา",
+        description=f"📅 วันที่: {date_str}\nค้นหา: {keyword}",
+        color=0x3498db
+    )
+
+    summary = {}
+    total_cases_all = 0
+
+    for name, ctype, inc, total in rows:
+        if name not in summary:
+            summary[name] = {
+                "normal_cases": 0,
+                "normal_posts": 0,
+                "point10_cases": 0,
+                "point10_posts": 0
+            }
+
+        if ctype == "normal":
+            summary[name]["normal_cases"] += total
+            summary[name]["normal_posts"] += inc
+        else:
+            summary[name]["point10_cases"] += total
+            summary[name]["point10_posts"] += inc
+
+        total_cases_all += total
+
+    for name, data in summary.items():
+        value = ""
+        if data["normal_cases"] > 0:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"] > 0:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
+
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
+
+    embed.set_footer(text=f"📊 รวมทั้งหมด: {total_cas
+
 
 # ======================
 # CMD HELP (สำคัญ)
@@ -574,9 +636,10 @@ async def cmd(ctx):
         value=(
             "`!today` — สรุปคดีวันนี้ (แยกคดีปกติ / จุด 10)\n"
             "`!me` — ดูคดีของตัวเองวันนี้\n"
-            "`!date DD/MM` — ดูคดีย้อนหลังตามวันที่\n"
+            "`!date DD/MM` — ดูคดีย้อนหลังตามวันที่ (ทุกคน)\n"
             "`!week` — สรุปคดีประจำสัปดาห์ (อาทิตย์–เสาร์)\n"
-            "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (วันนี้)"
+            "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (วันนี้)\n"
+            "`!checkdate DD/MM ชื่อ` — 🔍 เช็กคดีย้อนหลังรายบุคคล"
         ),
         inline=False
     )
@@ -593,7 +656,6 @@ async def cmd(ctx):
         )
 
     await ctx.send(embed=embed)
-
 
 # ======================
 # RESET DB
