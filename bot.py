@@ -776,14 +776,15 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
     await ctx.send(embed=embed)
 @bot.command()
 async def time(ctx):
-    now = now_th()
+    now = now_th()  # ✅ เรียกฟังก์ชันก่อน
+
     embed = Embed(
         title="⏰ Bot Time Check",
         color=0x3498db
     )
     embed.add_field(
         name="🕒 เวลาเซิร์ฟเวอร์บอท (TH)",
-        value=now_th.strftime("%d/%m/%Y %H:%M:%S"),
+        value=now.strftime("%d/%m/%Y %H:%M:%S"),  # ✅ now เป็น datetime แล้ว
         inline=False
     )
     embed.add_field(
