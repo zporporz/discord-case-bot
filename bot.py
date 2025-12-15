@@ -616,7 +616,11 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=f"📊 รวมทั้งหมด: {total_cas
+        embed.set_footer(
+        text=f"📊 รวมทั้งหมด: {total_cases_all} เคส"
+        )
+
+        await ctx.send(embed=embed)
 
 
 # ======================
@@ -656,6 +660,7 @@ async def cmd(ctx):
         )
 
     await ctx.send(embed=embed)
+
 
 # ======================
 # RESET DB
