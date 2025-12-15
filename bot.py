@@ -1111,7 +1111,6 @@ async def resetdb(ctx):
         f"พิมพ์ `!confirm {RESET_PASSWORD}`"
     )
 
-
 @bot.command()
 @is_pbt()
 async def confirm(ctx, password: str):
@@ -1132,8 +1131,7 @@ async def confirm(ctx, password: str):
     actor=ctx.author.display_name,
     detail="truncate cases"
     )
-        
-
+   
     await ctx.send("🧨 ลบข้อมูลเรียบร้อย")
 # ======================
 # REGISTER AUDIT COMMANDS
