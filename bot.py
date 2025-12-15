@@ -142,6 +142,8 @@ def count_posts_by_type(start_date, end_date=None):
                         COUNT(DISTINCT message_id) AS total_posts
                     FROM cases
                     WHERE date BETWEEN %s AND %s
+                        AND is_deleted = FALSE
+
                 """, (start_date, end_date))
             else:
                 cur.execute("""
@@ -151,6 +153,7 @@ def count_posts_by_type(start_date, end_date=None):
                         COUNT(DISTINCT message_id) AS total_posts
                     FROM cases
                     WHERE date = %s
+                        AND is_deleted = FALSE
                 """, (start_date,))
 
             return cur.fetchone()
@@ -366,7 +369,6 @@ async def on_message_delete(message):
             limit=5,
             action=discord.AuditLogAction.message_delete
         ):
-            # audit log จะอ้างถึง "คนที่โดนลบข้อความ"
             if entry.target.id == message.author.id:
                 delete_type = "🛡️ mod-delete"
                 deleted_by = entry.user.display_name
@@ -379,7 +381,12 @@ async def on_message_delete(message):
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "DELETE FROM cases WHERE message_id = %s",
+                    """
+                    UPDATE cases
+                    SET is_deleted = TRUE
+                    WHERE message_id = %s
+                      AND is_deleted = FALSE
+                    """,
                     (str(message.id),)
                 )
                 deleted = cur.rowcount
@@ -394,6 +401,7 @@ async def on_message_delete(message):
                 f"deleted_by={deleted_by} | "
                 f"rows={deleted}"
             )
+
         write_audit(
             action="DELETE_CASE",
             actor=deleted_by,
@@ -401,11 +409,11 @@ async def on_message_delete(message):
             channel=message.channel.name,
             message_id=str(message.id),
             detail=delete_type
-)
-            
+        )
 
     except Exception as e:
         print("❌ DB delete error:", e)
+
 
 @bot.event
 async def on_message_edit(before, after):
@@ -418,16 +426,21 @@ async def on_message_edit(before, after):
 
     print(f"✏️ Message edited | msg={after.id}")
 
-    # 1️⃣ ลบเคสเดิมทั้งหมดของ message นี้
+    # 1️⃣ soft-delete เคสเดิมทั้งหมดของ message นี้
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "DELETE FROM cases WHERE message_id = %s",
+                    """
+                    UPDATE cases
+                    SET is_deleted = TRUE
+                    WHERE message_id = %s
+                      AND is_deleted = FALSE
+                    """,
                     (str(after.id),)
                 )
                 deleted = cur.rowcount
-        print(f"🗑️ Deleted {deleted} old cases | msg={after.id}")
+        print(f"🗑️ Soft-deleted {deleted} old cases | msg={after.id}")
     except Exception as e:
         print("❌ DB delete error (edit):", e)
         return
@@ -461,6 +474,7 @@ async def on_message_edit(before, after):
         )
 
     print(f"✅ Recounted cases | msg={after.id}")
+
     write_audit(
         action="EDIT_CASE",
         actor=after.author.display_name,
@@ -484,6 +498,7 @@ async def today(ctx):
                 SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s
+                  AND is_deleted = FALSE
                 GROUP BY name, case_type
             """, (today,))
             rows = cur.fetchall()
@@ -567,7 +582,9 @@ async def me(ctx):
             cur.execute("""
                 SELECT case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
-                WHERE date = %s AND name = %s
+                WHERE date = %s
+                    AND name = %s
+                    AND is_deleted = FALSE
                 GROUP BY case_type
             """, (today, name))
             rows = cur.fetchall()
@@ -627,6 +644,7 @@ async def date(ctx, date_str: str):
                 SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s
+                AND is_deleted = FALSE
                 GROUP BY name, case_type
             """, (target,))
             rows = cur.fetchall()
@@ -694,6 +712,7 @@ async def week(ctx):
                 SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date BETWEEN %s AND %s
+                    AND is_deleted = FALSE
                 GROUP BY name, case_type
             """, (start, end))
             rows = cur.fetchall()
@@ -764,7 +783,9 @@ async def check(ctx, *, keyword: str = None):
             cur.execute("""
                 SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
-                WHERE date = %s AND name ILIKE %s
+                WHERE date = %s
+                    AND name ILIKE %s
+                    AND is_deleted = FALSE
                 GROUP BY name, case_type
             """, (today, f"%{keyword}%"))
             rows = cur.fetchall()
@@ -832,7 +853,9 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
             cur.execute("""
                 SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
-                WHERE date = %s AND name ILIKE %s
+                WHERE date = %s
+                    AND name ILIKE %s
+                    AND is_deleted = FALSE
                 GROUP BY name, case_type
             """, (target, f"%{keyword}%"))
             rows = cur.fetchall()
