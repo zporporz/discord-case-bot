@@ -413,17 +413,11 @@ async def today(ctx):
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(r"""
-                SELECT name, case_type, COUNT(*), SUM(cases)
+            cur.execute("""
+                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s
                 GROUP BY name, case_type
-                ORDER BY regexp_replace(
-                    name,
-                    '^\+?\d+\s*\[.*?\]\s*',
-                    '',
-                    'g'
-                )
             """, (today,))
             rows = cur.fetchall()
 
@@ -441,9 +435,12 @@ async def today(ctx):
     )
 
     summary = {}
-    total_cases_all = 0
 
-    # รวมข้อมูลก่อน
+    # ✅ footer = คดี (โพส)
+    total_posts_all = 0
+    total_normal_posts = 0
+    total_point10_posts = 0
+
     for name, ctype, inc, total in rows:
         if name not in summary:
             summary[name] = {
@@ -454,31 +451,26 @@ async def today(ctx):
             }
 
         if ctype == "normal":
-            summary[name]["normal_cases"] += total
-            summary[name]["normal_posts"] += inc
+            summary[name]["normal_cases"] += total        # เคส
+            summary[name]["normal_posts"] += inc          # คดี
+            total_normal_posts += inc
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
+            total_point10_posts += inc
 
-        total_cases_all += total
+        total_posts_all += inc   # ❗ นับโพสเท่านั้น
 
-    # แสดงผลรายคน
+    # ===== แสดงรายคน (ยังเป็นเคส) =====
     for name, data in summary.items():
         value = ""
 
         if data["normal_cases"] > 0:
-            value += (
-                f"📂 คดีปกติ: {data['normal_cases']} เคส "
-                f"({data['normal_posts']} คดี)\n"
-            )
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
 
         if data["point10_cases"] > 0:
-            value += (
-                f"🚨 คดีจุด 10: {data['point10_cases']} เคส "
-                f"({data['point10_posts']} คดี)\n"
-            )
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)\n"
 
-        # ✅ รวมทั้งหมดต่อคน + ตัวหนา
         total_person = data["normal_cases"] + data["point10_cases"]
         value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
 
@@ -488,8 +480,11 @@ async def today(ctx):
             inline=False
         )
 
+    # ===== footer = คดี (โพส) =====
     embed.set_footer(text=(
-        f"📊 รวมทั้งหมดทั้งระบบ: {total_cases_all} เคส\n"
+        f"📊 รวมทั้งหมดทั้งระบบ: {total_posts_all} คดี\n"
+        f"📂 คดีปกติ: {total_normal_posts} คดี | "
+        f"🚨 คดีจุด 10: {total_point10_posts} คดี\n"
         f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
     ))
 
@@ -503,7 +498,7 @@ async def me(ctx):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT case_type, COUNT(*), COALESCE(SUM(cases),0)
+                SELECT case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s AND name = %s
                 GROUP BY case_type
@@ -523,7 +518,9 @@ async def me(ctx):
         color=0x2ecc71
     )
 
-    total_cases_all = 0
+    total_posts_all = 0
+    total_normal_posts = 0
+    total_point10_posts = 0
 
     for ctype, inc, total in rows:
         label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
@@ -532,16 +529,22 @@ async def me(ctx):
             value=f"{total} เคส ({inc} คดี)",
             inline=False
         )
-        total_cases_all += total
+
+        total_posts_all += inc
+        if ctype == "normal":
+            total_normal_posts += inc
+        else:
+            total_point10_posts += inc
 
     embed.set_footer(text=(
-        f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
-        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        f"📊 รวมทั้งหมด: {total_posts_all} คดี\n"
+        f"📂 คดีปกติ: {total_normal_posts} คดี | "
+        f"🚨 คดีจุด 10: {total_point10_posts} คดี"
     ))
 
     await ctx.send(embed=embed)
 
-@bot.command()
+@@bot.command()
 async def date(ctx, date_str: str):
     try:
         d, m = map(int, date_str.split("/"))
@@ -553,17 +556,11 @@ async def date(ctx, date_str: str):
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(r"""
-                SELECT name, case_type, COUNT(*), SUM(cases)
+            cur.execute("""
+                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s
                 GROUP BY name, case_type
-                ORDER BY regexp_replace(
-                    name,
-                    '^\+?\d+\s*\[.*?\]\s*',
-                    '',
-                    'g'
-                )
             """, (target,))
             rows = cur.fetchall()
 
@@ -581,56 +578,41 @@ async def date(ctx, date_str: str):
     )
 
     summary = {}
-    total_cases_all = 0
+    total_posts_all = 0
+    total_normal_posts = 0
+    total_point10_posts = 0
 
-    # รวมข้อมูล
     for name, ctype, inc, total in rows:
-        if name not in summary:
-            summary[name] = {
-                "normal_cases": 0,
-                "normal_posts": 0,
-                "point10_cases": 0,
-                "point10_posts": 0
-            }
+        summary.setdefault(name, {
+            "normal_cases": 0, "normal_posts": 0,
+            "point10_cases": 0, "point10_posts": 0
+        })
 
         if ctype == "normal":
             summary[name]["normal_cases"] += total
             summary[name]["normal_posts"] += inc
+            total_normal_posts += inc
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
+            total_point10_posts += inc
 
-        total_cases_all += total
+        total_posts_all += inc
 
-    # แสดงผลรายคน
     for name, data in summary.items():
         value = ""
+        if data["normal_cases"]:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"]:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)\n"
 
-        if data["normal_cases"] > 0:
-            value += (
-                f"📂 คดีปกติ: {data['normal_cases']} เคส "
-                f"({data['normal_posts']} คดี)\n"
-            )
-
-        if data["point10_cases"] > 0:
-            value += (
-                f"🚨 คดีจุด 10: {data['point10_cases']} เคส "
-                f"({data['point10_posts']} คดี)\n"
-            )
-
-        # ✅ รวมทั้งหมดต่อคน (ตัวหนา)
-        total_person = data["normal_cases"] + data["point10_cases"]
-        value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
-
-        embed.add_field(
-            name=f"👤 {name}",
-            value=value,
-            inline=False
-        )
+        value += f"📊 **รวมทั้งหมด: {data['normal_cases'] + data['point10_cases']} เคส**"
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
     embed.set_footer(text=(
-        f"📊 รวมทั้งหมดทั้งระบบ: {total_cases_all} เคส\n"
-        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        f"📊 รวมทั้งหมดทั้งระบบ: {total_posts_all} คดี\n"
+        f"📂 คดีปกติ: {total_normal_posts} คดี | "
+        f"🚨 คดีจุด 10: {total_point10_posts} คดี"
     ))
 
     await ctx.send(embed=embed)
@@ -641,17 +623,11 @@ async def week(ctx):
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(r"""
-                SELECT name, case_type, COUNT(*), SUM(cases)
+            cur.execute("""
+                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date BETWEEN %s AND %s
                 GROUP BY name, case_type
-                ORDER BY regexp_replace(
-                    name,
-                    '^\+?\d+\s*\[.*?\]\s*',
-                    '',
-                    'g'
-                )
             """, (start, end))
             rows = cur.fetchall()
 
@@ -669,60 +645,44 @@ async def week(ctx):
     )
 
     summary = {}
-    total_cases_all = 0
+    total_posts_all = 0
+    total_normal_posts = 0
+    total_point10_posts = 0
 
-    # รวมข้อมูล
     for name, ctype, inc, total in rows:
-        if name not in summary:
-            summary[name] = {
-                "normal_cases": 0,
-                "normal_posts": 0,
-                "point10_cases": 0,
-                "point10_posts": 0
-            }
+        summary.setdefault(name, {
+            "normal_cases": 0, "normal_posts": 0,
+            "point10_cases": 0, "point10_posts": 0
+        })
 
         if ctype == "normal":
             summary[name]["normal_cases"] += total
             summary[name]["normal_posts"] += inc
+            total_normal_posts += inc
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
+            total_point10_posts += inc
 
-        total_cases_all += total
+        total_posts_all += inc
 
-    # แสดงผลรายคน
     for name, data in summary.items():
         value = ""
+        if data["normal_cases"]:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"]:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)\n"
 
-        if data["normal_cases"] > 0:
-            value += (
-                f"📂 คดีปกติ: {data['normal_cases']} เคส "
-                f"({data['normal_posts']} คดี)\n"
-            )
-
-        if data["point10_cases"] > 0:
-            value += (
-                f"🚨 คดีจุด 10: {data['point10_cases']} เคส "
-                f"({data['point10_posts']} คดี)\n"
-            )
-
-        # ✅ รวมทั้งหมดต่อคน (ตัวหนา)
-        total_person = data["normal_cases"] + data["point10_cases"]
-        value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
-
-        embed.add_field(
-            name=f"👤 {name}",
-            value=value,
-            inline=False
-        )
+        value += f"📊 **รวมทั้งหมด: {data['normal_cases'] + data['point10_cases']} เคส**"
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
     embed.set_footer(text=(
-        f"📊 รวมทั้งหมดทั้งระบบ: {total_cases_all} เคส\n"
-        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        f"📊 รวมทั้งหมดทั้งระบบ: {total_posts_all} คดี\n"
+        f"📂 คดีปกติ: {total_normal_posts} คดี | "
+        f"🚨 คดีจุด 10: {total_point10_posts} คดี"
     ))
 
     await ctx.send(embed=embed)
-
 
 @bot.command()
 async def check(ctx, *, keyword: str = None):
@@ -735,7 +695,7 @@ async def check(ctx, *, keyword: str = None):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT name, case_type, COUNT(*), SUM(cases)
+                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s AND name ILIKE %s
                 GROUP BY name, case_type
@@ -752,37 +712,41 @@ async def check(ctx, *, keyword: str = None):
         color=0x3498db
     )
 
+    total_posts_all = 0
+    total_normal_posts = 0
+    total_point10_posts = 0
     summary = {}
-    total_cases_all = 0
 
     for name, ctype, inc, total in rows:
-        if name not in summary:
-            summary[name] = {
-                "normal_cases": 0,
-                "normal_posts": 0,
-                "point10_cases": 0,
-                "point10_posts": 0
-            }
+        summary.setdefault(name, {
+            "normal_cases": 0, "normal_posts": 0,
+            "point10_cases": 0, "point10_posts": 0
+        })
 
         if ctype == "normal":
             summary[name]["normal_cases"] += total
             summary[name]["normal_posts"] += inc
+            total_normal_posts += inc
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
+            total_point10_posts += inc
 
-        total_cases_all += total
+        total_posts_all += inc
 
     for name, data in summary.items():
         value = ""
-        if data["normal_cases"] > 0:
+        if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
-        if data["point10_cases"] > 0:
+        if data["point10_cases"]:
             value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=f"📊 รวมทั้งหมด: {total_cases_all} เคส")
+    embed.set_footer(text=(
+        f"📊 รวมทั้งหมด: {total_posts_all} คดี | "
+        f"📂 {total_normal_posts} | 🚨 {total_point10_posts}"
+    ))
 
     await ctx.send(embed=embed)
 
@@ -799,7 +763,7 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT name, case_type, COUNT(*), SUM(cases)
+                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
                 FROM cases
                 WHERE date = %s AND name ILIKE %s
                 GROUP BY name, case_type
@@ -816,41 +780,41 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
         color=0x3498db
     )
 
+    total_posts_all = 0
+    total_normal_posts = 0
+    total_point10_posts = 0
     summary = {}
-    total_cases_all = 0
 
     for name, ctype, inc, total in rows:
-        if name not in summary:
-            summary[name] = {
-                "normal_cases": 0,
-                "normal_posts": 0,
-                "point10_cases": 0,
-                "point10_posts": 0
-            }
+        summary.setdefault(name, {
+            "normal_cases": 0, "normal_posts": 0,
+            "point10_cases": 0, "point10_posts": 0
+        })
 
         if ctype == "normal":
             summary[name]["normal_cases"] += total
             summary[name]["normal_posts"] += inc
+            total_normal_posts += inc
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
+            total_point10_posts += inc
 
-        total_cases_all += total
+        total_posts_all += inc
 
     for name, data in summary.items():
         value = ""
-        if data["normal_cases"] > 0:
+        if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
-        if data["point10_cases"] > 0:
+        if data["point10_cases"]:
             value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(
-        text=f"📊 รวมทั้งหมด: {total_cases_all} เคส"
-    )
+    embed.set_footer(text=(
+        f"📊 รวมทั้งหมด: {total_posts_all} คดี | "
+        f"📂 {total_normal_posts} | 🚨 {
 
-    await ctx.send(embed=embed)
 @bot.command()
 async def time(ctx):
     now = now_th()  # ✅ เรียกฟังก์ชันก่อน
