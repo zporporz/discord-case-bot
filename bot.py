@@ -10,7 +10,11 @@ from discord.ext import commands
 from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
-ALLOWED_COMMAND_CHANNEL_ID = 1449425399397482789
+ALLOWED_COMMAND_CHANNELS = {
+    1449425399397482789,  # ห้องคำสั่งหลัก
+    1450143956519227473   # ห้อง audit
+}
+
 
 
 # ======================
@@ -151,6 +155,33 @@ def count_posts_by_type(start_date, end_date=None):
 
             return cur.fetchone()
 
+def write_audit(
+    action: str,
+    actor: str = None,
+    target: str = None,
+    channel: str = None,
+    message_id: str = None,
+    detail: str = None
+):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO audit_logs
+                        (action, actor, target, channel, message_id, detail)
+                    VALUES
+                        (%s, %s, %s, %s, %s, %s)
+                """, (
+                    action,
+                    actor,
+                    target,
+                    channel,
+                    message_id,
+                    detail
+                ))
+    except Exception as e:
+        print("❌ audit log error:", e)
+
 # ======================
 # UTILS
 # ======================
@@ -211,11 +242,7 @@ async def restrict_commands_to_channel(ctx):
     if ctx.guild is None:
         return False
 
-    # อนุญาตเฉพาะห้องที่กำหนด
-    if ctx.channel.id != ALLOWED_COMMAND_CHANNEL_ID:
-        return False
-
-    return True
+    return ctx.channel.id in ALLOWED_COMMAND_CHANNELS
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -267,6 +294,10 @@ async def backfill_recent_cases(limit_per_channel=50):
     set_last_online(now_th())
 
     print("✅ Backfill finished")
+    write_audit(
+    action="BACKFILL",
+    detail=f"limit_per_channel={limit_per_channel}"
+    )
 
 @bot.event
 async def on_message(message):
@@ -363,6 +394,15 @@ async def on_message_delete(message):
                 f"deleted_by={deleted_by} | "
                 f"rows={deleted}"
             )
+        write_audit(
+            action="DELETE_CASE",
+            actor=deleted_by,
+            target=message.author.display_name,
+            channel=message.channel.name,
+            message_id=str(message.id),
+            detail=delete_type
+)
+            
 
     except Exception as e:
         print("❌ DB delete error:", e)
@@ -421,6 +461,14 @@ async def on_message_edit(before, after):
         )
 
     print(f"✅ Recounted cases | msg={after.id}")
+    write_audit(
+        action="EDIT_CASE",
+        actor=after.author.display_name,
+        channel=after.channel.name,
+        message_id=str(after.id),
+        detail=f"mentions={len(unique_members)}"
+    )
+
 
 # ======================
 # COMMANDS
@@ -897,6 +945,56 @@ async def posts(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.command()
+async def audit(ctx, limit: int = 10):
+    if ctx.channel.id != AUDIT_CHANNEL_ID:
+        await ctx.send("❌ ใช้คำสั่งนี้ได้เฉพาะห้อง audit เท่านั้น")
+        return
+
+    limit = max(1, min(limit, 20))  # กัน spam
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT action, actor, target, channel, message_id, detail, created_at
+                FROM audit_logs
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (limit,))
+            rows = cur.fetchall()
+
+    if not rows:
+        await ctx.send("📭 ยังไม่มี audit log")
+        return
+
+    embed = Embed(
+        title="🧾 Audit Log",
+        description=f"แสดง {len(rows)} รายการล่าสุด",
+        color=0xe67e22
+    )
+
+    for action, actor, target, channel, msg_id, detail, created in rows:
+        time_str = created.astimezone(TH_TZ).strftime("%d/%m %H:%M")
+
+        value = (
+            f"👤 **ผู้กระทำ:** {actor or '-'}\n"
+            f"🎯 **เป้าหมาย:** {target or '-'}\n"
+            f"📍 **ห้อง:** {channel or '-'}\n"
+            f"🆔 **Message:** `{msg_id or '-'}`\n"
+            f"📝 **รายละเอียด:** {detail or '-'}\n"
+            f"🕒 {time_str}"
+        )
+
+        embed.add_field(
+            name=f"🔹 {action}",
+            value=value,
+            inline=False
+        )
+
+    embed.set_footer(text="Audit Log System")
+
+    await ctx.send(embed=embed)
+
 # ======================
 # CMD HELP (สำคัญ)
 # ======================
@@ -997,12 +1095,17 @@ async def confirm(ctx, password: str):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE TABLE cases RESTART IDENTITY;")
+    write_audit(
+    action="RESET_DB",
+    actor=ctx.author.display_name,
+    detail="truncate cases"
+    )
+        
 
     await ctx.send("🧨 ลบข้อมูลเรียบร้อย")
 # ======================
 # REGISTER AUDIT COMMANDS
 # ======================
-setup_audit_commands(bot, get_conn, is_pbt)
 # ======================
 # RUN
 # ======================
