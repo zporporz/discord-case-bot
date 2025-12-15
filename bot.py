@@ -813,7 +813,10 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
 
     embed.set_footer(text=(
         f"📊 รวมทั้งหมด: {total_posts_all} คดี | "
-        f"📂 {total_normal_posts} | 🚨 {
+        f"📂 {total_normal_posts} | 🚨 {total_point10_posts}"
+    ))
+
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def time(ctx):
