@@ -774,7 +774,24 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
     )
 
     await ctx.send(embed=embed)
-
+@bot.command()
+async def time(ctx):
+    now_th = now_th()
+    embed = Embed(
+        title="⏰ Bot Time Check",
+        color=0x3498db
+    )
+    embed.add_field(
+        name="🕒 เวลาเซิร์ฟเวอร์บอท (TH)",
+        value=now_th.strftime("%d/%m/%Y %H:%M:%S"),
+        inline=False
+    )
+    embed.add_field(
+        name="🌏 Timezone",
+        value="UTC+7 (Asia/Bangkok)",
+        inline=False
+    )
+    await ctx.send(embed=embed)
 
 # ======================
 # CMD HELP (สำคัญ)
@@ -797,6 +814,7 @@ async def cmd(ctx):
             "`!week` — สรุปคดีประจำสัปดาห์ (อาทิตย์–เสาร์)\n"
             "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (วันนี้)\n"
             "`!checkdate DD/MM ชื่อ` — 🔍 เช็กคดีย้อนหลังรายบุคคล"
+            "`!Time` — 🔍 ตรวจเวลาของบอท"
         ),
         inline=False
     )
