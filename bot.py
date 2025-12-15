@@ -259,20 +259,20 @@ async def today(ctx):
         color=0x2ecc71
     )
 
-    total_all = 0
+    total_cases_all = 0
 
     for name, ctype, inc, total in rows:
         label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
         embed.add_field(
             name=f"👤 {name}",
-            value=f"{label}\n• {inc} คดี",
+            value=f"{label}\n• {total} เคส ({inc} คดี)",
             inline=False
         )
-        total_all += inc
+        total_cases_all += total
 
     embed.set_footer(
         text=(
-            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
             f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
         )
     )
@@ -309,20 +309,20 @@ async def me(ctx):
         color=0x2ecc71
     )
 
-    total_all = 0
+    total_cases_all = 0
 
     for ctype, inc, total in rows:
         label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
         embed.add_field(
             name=label,
-            value=f"• {inc} คดี",
+            value=f"• {total} เคส ({inc} คดี)",
             inline=False
         )
-        total_all += inc
+        total_cases_all += total
 
     embed.set_footer(
         text=(
-            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
             f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
         )
     )
@@ -370,26 +370,25 @@ async def date(ctx, date_str: str):
         color=0x2ecc71
     )
 
-    total_all = 0
+    total_cases_all = 0
 
     for name, ctype, inc, total in rows:
         label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
         embed.add_field(
             name=f"👤 {name}",
-            value=f"{label}\n• {inc} คดี",
+            value=f"{label}\n• {total} เคส ({inc} คดี)",
             inline=False
         )
-        total_all += inc
+        total_cases_all += total
 
     embed.set_footer(
         text=(
-            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
             f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
         )
     )
 
     await ctx.send(embed=embed)
-
 
 @bot.command()
 async def week(ctx):
@@ -398,11 +397,17 @@ async def week(ctx):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(r"""
-                ...
-                '^\+?\d+\s*\[.*?\]\s*'
-                ...
+                SELECT name, case_type, COUNT(*), SUM(cases)
+                FROM cases
+                WHERE date BETWEEN %s AND %s
+                GROUP BY name, case_type
+                ORDER BY regexp_replace(
+                    name,
+                    '^\+?\d+\s*\[.*?\]\s*',
+                    '',
+                    'g'
+                )
             """, (start, end))
-
             rows = cur.fetchall()
 
     if not rows:
@@ -421,25 +426,32 @@ async def week(ctx):
     )
 
     summary = {}
-    total_all = 0
+    total_cases_all = 0
 
     for name, ctype, inc, total in rows:
         if name not in summary:
-            summary[name] = {"normal": 0, "point10": 0}
+            summary[name] = {
+                "normal_cases": 0,
+                "normal_posts": 0,
+                "point10_cases": 0,
+                "point10_posts": 0
+            }
 
         if ctype == "normal":
-            summary[name]["normal"] += inc
+            summary[name]["normal_posts"] += inc
+            summary[name]["normal_cases"] += total
         else:
-            summary[name]["point10"] += inc
+            summary[name]["point10_posts"] += inc
+            summary[name]["point10_cases"] += total
 
-        total_all += inc
+        total_cases_all += total
 
     for name, data in summary.items():
         value = ""
-        if data["normal"] > 0:
-            value += f"📂 คดีปกติ: {data['normal']} คดี\n"
-        if data["point10"] > 0:
-            value += f"🚨 คดีจุด 10: {data['point10']} คดี"
+        if data["normal_cases"] > 0:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"] > 0:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
 
         embed.add_field(
             name=f"👤 {name}",
@@ -449,13 +461,12 @@ async def week(ctx):
 
     embed.set_footer(
         text=(
-            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
             f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
         )
     )
 
     await ctx.send(embed=embed)
-
 
 @bot.command()
 async def check(ctx, *, keyword: str = None):
@@ -479,12 +490,26 @@ async def check(ctx, *, keyword: str = None):
         await ctx.send("ไม่พบข้อมูล")
         return
 
-    msg = f"🔍 **ผลการค้นหา {keyword} วันนี้**\n\n"
-    for name, ctype, inc, total in rows:
-        label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
-        msg += f"- {name}: {label} {inc} คดี ({total} เคส)\n"
+    embed = Embed(
+        title="🔍 ผลการค้นหา (วันนี้)",
+        description=f"ค้นหา: {keyword}",
+        color=0x3498db
+    )
 
-    await ctx.send(msg)
+    total_cases_all = 0
+
+    for name, ctype, inc, total in rows:
+        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
+        embed.add_field(
+            name=f"👤 {name}",
+            value=f"{label}\n• {total} เคส ({inc} คดี)",
+            inline=False
+        )
+        total_cases_all += total
+
+    embed.set_footer(text=f"📊 รวมทั้งหมด: {total_cases_all} เคส")
+
+    await ctx.send(embed=embed)
 
 
 # ======================
