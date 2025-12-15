@@ -245,12 +245,10 @@ async def today(ctx):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send(
-            embed=Embed(
-                description="📭 วันนี้ยังไม่มีคดี",
-                color=0x2f3136
-            )
-        )
+        await ctx.send(embed=Embed(
+            description="📭 วันนี้ยังไม่มีคดี",
+            color=0x2f3136
+        ))
         return
 
     embed = Embed(
@@ -259,23 +257,40 @@ async def today(ctx):
         color=0x2ecc71
     )
 
+    summary = {}
     total_cases_all = 0
 
     for name, ctype, inc, total in rows:
-        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
-        embed.add_field(
-            name=f"👤 {name}",
-            value=f"{label}\n• {total} เคส ({inc} คดี)",
-            inline=False
-        )
+        if name not in summary:
+            summary[name] = {
+                "normal_cases": 0,
+                "normal_posts": 0,
+                "point10_cases": 0,
+                "point10_posts": 0
+            }
+
+        if ctype == "normal":
+            summary[name]["normal_cases"] += total
+            summary[name]["normal_posts"] += inc
+        else:
+            summary[name]["point10_cases"] += total
+            summary[name]["point10_posts"] += inc
+
         total_cases_all += total
 
-    embed.set_footer(
-        text=(
-            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
-            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
-        )
-    )
+    for name, data in summary.items():
+        value = ""
+        if data["normal_cases"] > 0:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"] > 0:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
+
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
+
+    embed.set_footer(text=(
+        f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
+        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+    ))
 
     await ctx.send(embed=embed)
 
@@ -295,12 +310,10 @@ async def me(ctx):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send(
-            embed=Embed(
-                description="📭 วันนี้คุณยังไม่มีคดี",
-                color=0x2f3136
-            )
-        )
+        await ctx.send(embed=Embed(
+            description="📭 วันนี้คุณยังไม่มีคดี",
+            color=0x2f3136
+        ))
         return
 
     embed = Embed(
@@ -315,17 +328,15 @@ async def me(ctx):
         label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
         embed.add_field(
             name=label,
-            value=f"• {total} เคส ({inc} คดี)",
+            value=f"{total} เคส ({inc} คดี)",
             inline=False
         )
         total_cases_all += total
 
-    embed.set_footer(
-        text=(
-            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
-            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
-        )
-    )
+    embed.set_footer(text=(
+        f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
+        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+    ))
 
     await ctx.send(embed=embed)
 
@@ -356,12 +367,10 @@ async def date(ctx, date_str: str):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send(
-            embed=Embed(
-                description=f"📭 วันที่ {date_str} ไม่มีคดี",
-                color=0x2f3136
-            )
-        )
+        await ctx.send(embed=Embed(
+            description=f"📭 วันที่ {date_str} ไม่มีคดี",
+            color=0x2f3136
+        ))
         return
 
     embed = Embed(
@@ -370,23 +379,40 @@ async def date(ctx, date_str: str):
         color=0x2ecc71
     )
 
+    summary = {}
     total_cases_all = 0
 
     for name, ctype, inc, total in rows:
-        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
-        embed.add_field(
-            name=f"👤 {name}",
-            value=f"{label}\n• {total} เคส ({inc} คดี)",
-            inline=False
-        )
+        if name not in summary:
+            summary[name] = {
+                "normal_cases": 0,
+                "normal_posts": 0,
+                "point10_cases": 0,
+                "point10_posts": 0
+            }
+
+        if ctype == "normal":
+            summary[name]["normal_cases"] += total
+            summary[name]["normal_posts"] += inc
+        else:
+            summary[name]["point10_cases"] += total
+            summary[name]["point10_posts"] += inc
+
         total_cases_all += total
 
-    embed.set_footer(
-        text=(
-            f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
-            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
-        )
-    )
+    for name, data in summary.items():
+        value = ""
+        if data["normal_cases"] > 0:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"] > 0:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
+
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
+
+    embed.set_footer(text=(
+        f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
+        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+    ))
 
     await ctx.send(embed=embed)
 
@@ -496,16 +522,35 @@ async def check(ctx, *, keyword: str = None):
         color=0x3498db
     )
 
+    summary = {}
     total_cases_all = 0
 
     for name, ctype, inc, total in rows:
-        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
-        embed.add_field(
-            name=f"👤 {name}",
-            value=f"{label}\n• {total} เคส ({inc} คดี)",
-            inline=False
-        )
+        if name not in summary:
+            summary[name] = {
+                "normal_cases": 0,
+                "normal_posts": 0,
+                "point10_cases": 0,
+                "point10_posts": 0
+            }
+
+        if ctype == "normal":
+            summary[name]["normal_cases"] += total
+            summary[name]["normal_posts"] += inc
+        else:
+            summary[name]["point10_cases"] += total
+            summary[name]["point10_posts"] += inc
+
         total_cases_all += total
+
+    for name, data in summary.items():
+        value = ""
+        if data["normal_cases"] > 0:
+            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
+        if data["point10_cases"] > 0:
+            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
+
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
     embed.set_footer(text=f"📊 รวมทั้งหมด: {total_cases_all} เคส")
 
