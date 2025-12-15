@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from discord.ext import commands
 from audit.audit_commands import setup_audit_commands
 from discord import Embed
-from datetime import datetime
+from datetime import timezone
 
 # ======================
 # ENV / CONSTANTS
@@ -26,6 +26,7 @@ NORMAL_CHANNEL_IDS = [
     1400477664900288576
 ]
 
+TH_TZ = timezone(timedelta(hours=7))
 
 # ======================
 # PERMISSION CHECK
@@ -77,6 +78,52 @@ def save_case_pg(
     except Exception as e:
         print("❌ DB error:", e)
 
+def is_message_saved(message_id: int) -> bool:
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM cases WHERE message_id = %s LIMIT 1",
+                    (str(message_id),)
+                )
+                return cur.fetchone() is not None
+    except Exception as e:
+        print("❌ DB check error:", e)
+        return True  # กันพลาด ไม่ insert ซ้ำ
+
+def get_last_online():
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT value FROM bot_meta WHERE key = 'last_online'"
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+
+                dt = datetime.fromisoformat(row[0])
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=TH_TZ)
+
+                return dt
+    except Exception as e:
+        print("❌ get_last_online error:", e)
+        return None
+
+
+def set_last_online(dt: datetime):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO bot_meta (key, value)
+                    VALUES ('last_online', %s)
+                    ON CONFLICT (key)
+                    DO UPDATE SET value = EXCLUDED.value
+                """, (dt.isoformat(),))
+    except Exception as e:
+        print("❌ set_last_online error:", e)
 
 # ======================
 # UTILS
@@ -88,11 +135,40 @@ def normalize_name(name: str):
 
 
 def get_week_range_sun_sat():
-    today = datetime.now().date()
+    today = today_th()
     start = today - timedelta(days=(today.weekday() + 1) % 7)
     end = start + timedelta(days=6)
     return start, end
 
+def process_case_message(message):
+    # เลือกประเภทเคส
+    if message.channel.id == CASE10_CHANNEL_ID:
+        case_type = "case10"
+        case_value = 2
+    elif message.channel.id in NORMAL_CHANNEL_IDS:
+        case_type = "normal"
+        case_value = 1
+    else:
+        return
+
+    message_date = message.created_at.astimezone(TH_TZ).date()
+    unique_members = set(message.mentions)
+
+    for member in unique_members:
+        save_case_pg(
+            member.display_name,
+            message.channel.name,
+            case_type,
+            case_value,
+            message.id,
+            message_date
+        )
+
+def now_th():
+    return datetime.now(TH_TZ)
+
+def today_th():
+    return now_th().date()
 
 # ======================
 # DISCORD SETUP
@@ -110,7 +186,42 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"🤖 Bot online: {bot.user}")
+    await backfill_recent_cases()
 
+async def backfill_recent_cases(limit_per_channel=50):
+    print("🔄 Backfill started")
+
+    last_online = get_last_online()
+    now = now_th()
+
+    for channel_id in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            continue
+
+        async for msg in channel.history(limit=limit_per_channel):
+            if msg.author.bot or not msg.mentions:
+                continue
+
+            # 👉 ถ้ามี last_online ใช้แบบเวลา
+            if last_online and msg.created_at.astimezone(TH_TZ) <= last_online:
+                continue
+
+            if is_message_saved(msg.id):
+                continue
+
+            process_case_message(msg)
+
+            print(
+                f"🧩 Backfilled | "
+                f"msg={msg.id} | "
+                f"channel={channel.name}"
+            )
+
+    # ✅ update เวลา หลัง backfill เสร็จ
+    set_last_online(now_th())
+
+    print("✅ Backfill finished")
 
 @bot.event
 async def on_message(message):
@@ -129,7 +240,7 @@ async def on_message(message):
     else:
         return
 
-    message_date = message.created_at.astimezone().date()
+    message_date = message.created_at.astimezone(TH_TZ).date()
 
     mentions = message.mentions
     unique_members = set(mentions)
@@ -203,16 +314,21 @@ async def on_message_delete(message):
 
 @bot.event
 async def on_message_edit(before, after):
+    # สนใจเฉพาะห้องคดี
+    if after.channel.id not in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
+        return
+
     if after.author.bot:
         return
 
-    # กันแก้ไขข้ามวัน
-    if after.created_at.date() != datetime.now().date():
+    # ใช้เวลาไทย
+    if after.created_at.astimezone(TH_TZ).date() != today_th():
         print(f"⛔ Ignore edit (old message) | msg={after.id}")
         return
 
     print(f"✏️ Message edited | msg={after.id}")
 
+    # 1️⃣ ลบเคสเดิมทั้งหมดของ message นี้
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -220,15 +336,18 @@ async def on_message_edit(before, after):
                     "DELETE FROM cases WHERE message_id = %s",
                     (str(after.id),)
                 )
-        print(f"🗑️ Deleted old cases | msg={after.id}")
+                deleted = cur.rowcount
+        print(f"🗑️ Deleted {deleted} old cases | msg={after.id}")
     except Exception as e:
         print("❌ DB delete error (edit):", e)
         return
 
+    # 2️⃣ ถ้าแก้แล้วไม่มี mention → ถือว่าตั้งใจลบเคส
     if not after.mentions:
-        print(f"ℹ️ No mentions after edit | msg={after.id}")
+        print(f"ℹ️ Edit removed mentions | msg={after.id}")
         return
 
+    # 3️⃣ นับใหม่จากข้อความล่าสุด
     if after.channel.id == CASE10_CHANNEL_ID:
         case_type = "case10"
         case_value = 2
@@ -238,7 +357,7 @@ async def on_message_edit(before, after):
     else:
         return
 
-    message_date = after.created_at.astimezone().date()
+    message_date = after.created_at.astimezone(TH_TZ).date()
     unique_members = set(after.mentions)
 
     for member in unique_members:
@@ -251,6 +370,7 @@ async def on_message_edit(before, after):
             message_date
         )
 
+    print(f"✅ Recounted cases | msg={after.id}")
 
 # ======================
 # COMMANDS
@@ -258,7 +378,7 @@ async def on_message_edit(before, after):
 
 @bot.command()
 async def today(ctx):
-    today = datetime.now().date()
+    today = today_th()
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -328,7 +448,7 @@ async def today(ctx):
 
 @bot.command()
 async def me(ctx):
-    today = datetime.now().date()
+    today = today_th()
     name = ctx.author.display_name
 
     with get_conn() as conn:
@@ -376,8 +496,9 @@ async def me(ctx):
 async def date(ctx, date_str: str):
     try:
         d, m = map(int, date_str.split("/"))
-        y = datetime.now().year
-        target = datetime(y, m, d).date()
+        y = now_th().year
+        target = datetime(y, m, d, tzinfo=TH_TZ).date()
+
     except:
         await ctx.send("❌ ใช้ `!date DD/MM`")
         return
@@ -532,7 +653,7 @@ async def check(ctx, *, keyword: str = None):
         await ctx.send("❌ ใช้ `!check ชื่อ`")
         return
 
-    today = datetime.now().date()
+    today = today_th()
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -592,8 +713,8 @@ async def check(ctx, *, keyword: str = None):
 async def checkdate(ctx, date_str: str, *, keyword: str):
     try:
         d, m = map(int, date_str.split("/"))
-        y = datetime.now().year
-        target = datetime(y, m, d).date()
+        y = now_th().year
+        target = datetime(y, m, d, tzinfo=TH_TZ).date()
     except:
         await ctx.send("❌ ใช้ `!checkdate DD/MM ชื่อ`")
         return
@@ -648,11 +769,11 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-        embed.set_footer(
+    embed.set_footer(
         text=f"📊 รวมทั้งหมด: {total_cases_all} เคส"
-        )
+    )
 
-        await ctx.send(embed=embed)
+    await ctx.send(embed=embed)
 
 
 # ======================
