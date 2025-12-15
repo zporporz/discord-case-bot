@@ -544,7 +544,7 @@ async def me(ctx):
 
     await ctx.send(embed=embed)
 
-@@bot.command()
+@bot.command()
 async def date(ctx, date_str: str):
     try:
         d, m = map(int, date_str.split("/"))
