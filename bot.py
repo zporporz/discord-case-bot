@@ -279,7 +279,6 @@ async def today(ctx):
 
     await ctx.send(embed=embed)
 
-
 @bot.command()
 async def me(ctx):
     today = datetime.now().date()
@@ -296,16 +295,39 @@ async def me(ctx):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send("วันนี้คุณยังไม่มีคดี")
+        await ctx.send(
+            embed=Embed(
+                description="📭 วันนี้คุณยังไม่มีคดี",
+                color=0x2f3136
+            )
+        )
         return
 
-    msg = f"👮 **{name} วันนี้**\n\n"
+    embed = Embed(
+        title="📊 Case Summary — Me",
+        description=f"📅 วันที่: {today.strftime('%d/%m/%Y')}\n👤 เจ้าหน้าที่: {name}",
+        color=0x2ecc71
+    )
+
+    total_all = 0
+
     for ctype, inc, total in rows:
-        label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
-        msg += f"- {label}: {inc} คดี ({total} เคส)\n"
+        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
+        embed.add_field(
+            name=label,
+            value=f"• {inc} คดี",
+            inline=False
+        )
+        total_all += inc
 
-    await ctx.send(msg)
+    embed.set_footer(
+        text=(
+            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        )
+    )
 
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def date(ctx, date_str: str):
@@ -334,15 +356,39 @@ async def date(ctx, date_str: str):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send(f"📅 วันที่ {date_str} ไม่มีคดี")
+        await ctx.send(
+            embed=Embed(
+                description=f"📭 วันที่ {date_str} ไม่มีคดี",
+                color=0x2f3136
+            )
+        )
         return
 
-    msg = f"📊 **สรุปคดีวันที่ {date_str}**\n\n"
-    for name, ctype, inc, total in rows:
-        label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
-        msg += f"- {name}: {label} {inc} คดี ({total} เคส)\n"
+    embed = Embed(
+        title="📊 Case Summary — Date",
+        description=f"📅 วันที่: {date_str}",
+        color=0x2ecc71
+    )
 
-    await ctx.send(msg)
+    total_all = 0
+
+    for name, ctype, inc, total in rows:
+        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
+        embed.add_field(
+            name=f"👤 {name}",
+            value=f"{label}\n• {inc} คดี",
+            inline=False
+        )
+        total_all += inc
+
+    embed.set_footer(
+        text=(
+            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        )
+    )
+
+    await ctx.send(embed=embed)
 
 
 @bot.command()
@@ -352,23 +398,69 @@ async def week(ctx):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT name, SUM(cases)
+                SELECT name, case_type, COUNT(*), COALESCE(SUM(cases),0)
                 FROM cases
                 WHERE date BETWEEN %s AND %s
-                GROUP BY name
-                ORDER BY SUM(cases) DESC
+                GROUP BY name, case_type
+                ORDER BY regexp_replace(
+                    name,
+                    '^\+?\d+\s*\[.*?\]\s*',
+                    '',
+                    'g'
+                )
             """, (start, end))
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send("ไม่มีข้อมูลในสัปดาห์นี้")
+        await ctx.send(
+            embed=Embed(
+                description="📭 ไม่มีข้อมูลในสัปดาห์นี้",
+                color=0x2f3136
+            )
+        )
         return
 
-    msg = f"📆 **สรุปสัปดาห์ ({start} → {end})**\n\n"
-    for name, total in rows:
-        msg += f"- {name}: {total} เคส\n"
+    embed = Embed(
+        title="📊 Case Summary — Week",
+        description=f"📆 ช่วงเวลา: {start.strftime('%d/%m')} → {end.strftime('%d/%m')}",
+        color=0x2ecc71
+    )
 
-    await ctx.send(msg)
+    summary = {}
+    total_all = 0
+
+    for name, ctype, inc, total in rows:
+        if name not in summary:
+            summary[name] = {"normal": 0, "point10": 0}
+
+        if ctype == "normal":
+            summary[name]["normal"] += inc
+        else:
+            summary[name]["point10"] += inc
+
+        total_all += inc
+
+    for name, data in summary.items():
+        value = ""
+        if data["normal"] > 0:
+            value += f"📂 คดีปกติ: {data['normal']} คดี\n"
+        if data["point10"] > 0:
+            value += f"🚨 คดีจุด 10: {data['point10']} คดี"
+
+        embed.add_field(
+            name=f"👤 {name}",
+            value=value,
+            inline=False
+        )
+
+    embed.set_footer(
+        text=(
+            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        )
+    )
+
+    await ctx.send(embed=embed)
 
 
 @bot.command()
@@ -405,35 +497,38 @@ async def check(ctx, *, keyword: str = None):
 # CMD HELP (สำคัญ)
 # ======================
 @bot.command()
-async def cmd(ctx, section: str = None):
-    if section is None:
-        msg = (
-            "📖 **คำสั่งบอทนับคดี**\n\n"
-            "👮 **คำสั่งทั่วไป**\n"
+async def cmd(ctx):
+    embed = Embed(
+        title="📖 Case Bot — คำสั่งที่ใช้งานได้",
+        description="บอทสำหรับสรุปคดีปกติ และคดีจุด 10",
+        color=0x3498db
+    )
+
+    # ===== คำสั่งทั่วไป =====
+    embed.add_field(
+        name="👮 คำสั่งทั่วไป",
+        value=(
             "`!today` — สรุปคดีวันนี้ (แยกคดีปกติ / จุด 10)\n"
             "`!me` — ดูคดีของตัวเองวันนี้\n"
             "`!date DD/MM` — ดูคดีย้อนหลังตามวันที่\n"
             "`!week` — สรุปคดีประจำสัปดาห์ (อาทิตย์–เสาร์)\n"
-            "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (วันนี้)\n\n"
-            "🛠️ พิมพ์ `!cmd admin` สำหรับคำสั่งผู้บังคับบัญชา"
+            "`!check ชื่อ` — 🔍 เช็กคดีของบุคคล (วันนี้)"
+        ),
+        inline=False
+    )
+
+    # ===== คำสั่งแอดมิน =====
+    if any(role.id == PBT_ROLE_ID for role in ctx.author.roles):
+        embed.add_field(
+            name="🛑 คำสั่งผู้บังคับบัญชา (ผบตร.)",
+            value=(
+                "`!resetdb` — 🧨 ลบข้อมูลคดีทั้งหมด\n"
+                "`!confirm <password>` — ยืนยันการลบข้อมูล"
+            ),
+            inline=False
         )
-        await ctx.send(msg)
-        return
 
-    if section.lower() == "admin":
-        if not any(role.id == PBT_ROLE_ID for role in ctx.author.roles):
-            await ctx.send("⛔ ใช้ได้เฉพาะ **ผบตร.**")
-            return
-
-        msg = (
-            "🛑 **คำสั่งผู้บังคับบัญชา (ผบตร.)**\n\n"
-            "`!resetdb` — 🧨 ลบข้อมูลคดีทั้งหมด\n"
-            "`!confirm <password>` — ยืนยันการลบข้อมูล"
-        )
-        await ctx.send(msg)
-        return
-
-    await ctx.send("❓ ไม่พบหมวดคำสั่งนี้ ใช้ `!cmd` หรือ `!cmd admin`")
+    await ctx.send(embed=embed)
 
 
 # ======================
