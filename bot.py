@@ -8,6 +8,8 @@ import psycopg2
 from datetime import datetime, timedelta
 from discord.ext import commands
 from audit.audit_commands import setup_audit_commands
+from discord import Embed
+from datetime import datetime
 
 # ======================
 # ENV / CONSTANTS
@@ -221,6 +223,7 @@ async def on_message_edit(before, after):
 # ======================
 # COMMANDS
 # ======================
+
 @bot.command()
 async def today(ctx):
     today = datetime.now().date()
@@ -242,15 +245,39 @@ async def today(ctx):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send("วันนี้ยังไม่มีคดี")
+        await ctx.send(
+            embed=Embed(
+                description="📭 วันนี้ยังไม่มีคดี",
+                color=0x2f3136
+            )
+        )
         return
 
-    msg = "📊 **สรุปคดีวันนี้**\n\n"
-    for name, ctype, inc, total in rows:
-        label = "คดีปกติ" if ctype == "normal" else "คดีจุด 10"
-        msg += f"- {name}: {label} {inc} คดี ({total} เคส)\n"
+    embed = Embed(
+        title="📊 Case Summary — Today",
+        description=f"📅 วันที่: {today.strftime('%d/%m/%Y')}",
+        color=0x2ecc71
+    )
 
-    await ctx.send(msg)
+    total_all = 0
+
+    for name, ctype, inc, total in rows:
+        label = "📂 คดีปกติ" if ctype == "normal" else "🚨 คดีจุด 10"
+        embed.add_field(
+            name=f"👤 {name}",
+            value=f"{label}\n• {inc} คดี",
+            inline=False
+        )
+        total_all += inc
+
+    embed.set_footer(
+        text=(
+            f"📊 รวมทั้งหมด: {total_all} คดี\n"
+            f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+        )
+    )
+
+    await ctx.send(embed=embed)
 
 
 @bot.command()
