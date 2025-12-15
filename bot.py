@@ -970,11 +970,7 @@ async def posts(ctx):
 
 @bot.command()
 async def audit(ctx, limit: int = 10):
-    if ctx.channel.id != AUDIT_CHANNEL_ID:
-        await ctx.send("❌ ใช้คำสั่งนี้ได้เฉพาะห้อง audit เท่านั้น")
-        return
-
-    limit = max(1, min(limit, 20))  # กัน spam
+    limit = max(1, min(limit, 20))
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -998,23 +994,18 @@ async def audit(ctx, limit: int = 10):
 
     for action, actor, target, channel, msg_id, detail, created in rows:
         time_str = created.astimezone(TH_TZ).strftime("%d/%m %H:%M")
-
-        value = (
-            f"👤 **ผู้กระทำ:** {actor or '-'}\n"
-            f"🎯 **เป้าหมาย:** {target or '-'}\n"
-            f"📍 **ห้อง:** {channel or '-'}\n"
-            f"🆔 **Message:** `{msg_id or '-'}`\n"
-            f"📝 **รายละเอียด:** {detail or '-'}\n"
-            f"🕒 {time_str}"
-        )
-
         embed.add_field(
             name=f"🔹 {action}",
-            value=value,
+            value=(
+                f"👤 {actor or '-'}\n"
+                f"🎯 {target or '-'}\n"
+                f"📍 {channel or '-'}\n"
+                f"🆔 `{msg_id or '-'}`\n"
+                f"📝 {detail or '-'}\n"
+                f"🕒 {time_str}"
+            ),
             inline=False
         )
-
-    embed.set_footer(text="Audit Log System")
 
     await ctx.send(embed=embed)
 
