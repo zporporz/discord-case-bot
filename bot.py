@@ -684,7 +684,8 @@ async def date(ctx, date_str: str):
 
         total_posts_all += inc
 
-    for name, data in summary.items():
+    for name in sorted(summary.keys(), key=normalize_name):
+        data = summary[name]
         value = ""
         if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
