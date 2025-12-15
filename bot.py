@@ -412,6 +412,7 @@ async def today(ctx):
     summary = {}
     total_cases_all = 0
 
+    # รวมข้อมูลก่อน
     for name, ctype, inc, total in rows:
         if name not in summary:
             summary[name] = {
@@ -430,17 +431,34 @@ async def today(ctx):
 
         total_cases_all += total
 
+    # แสดงผลรายคน
     for name, data in summary.items():
         value = ""
-        if data["normal_cases"] > 0:
-            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
-        if data["point10_cases"] > 0:
-            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
 
-        embed.add_field(name=f"👤 {name}", value=value, inline=False)
+        if data["normal_cases"] > 0:
+            value += (
+                f"📂 คดีปกติ: {data['normal_cases']} เคส "
+                f"({data['normal_posts']} คดี)\n"
+            )
+
+        if data["point10_cases"] > 0:
+            value += (
+                f"🚨 คดีจุด 10: {data['point10_cases']} เคส "
+                f"({data['point10_posts']} คดี)\n"
+            )
+
+        # ✅ รวมทั้งหมดต่อคน + ตัวหนา
+        total_person = data["normal_cases"] + data["point10_cases"]
+        value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
+
+        embed.add_field(
+            name=f"👤 {name}",
+            value=value,
+            inline=False
+        )
 
     embed.set_footer(text=(
-        f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
+        f"📊 รวมทั้งหมดทั้งระบบ: {total_cases_all} เคส\n"
         f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
     ))
 
@@ -498,7 +516,6 @@ async def date(ctx, date_str: str):
         d, m = map(int, date_str.split("/"))
         y = now_th().year
         target = datetime(y, m, d, tzinfo=TH_TZ).date()
-
     except:
         await ctx.send("❌ ใช้ `!date DD/MM`")
         return
@@ -535,6 +552,7 @@ async def date(ctx, date_str: str):
     summary = {}
     total_cases_all = 0
 
+    # รวมข้อมูล
     for name, ctype, inc, total in rows:
         if name not in summary:
             summary[name] = {
@@ -553,17 +571,34 @@ async def date(ctx, date_str: str):
 
         total_cases_all += total
 
+    # แสดงผลรายคน
     for name, data in summary.items():
         value = ""
-        if data["normal_cases"] > 0:
-            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
-        if data["point10_cases"] > 0:
-            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
 
-        embed.add_field(name=f"👤 {name}", value=value, inline=False)
+        if data["normal_cases"] > 0:
+            value += (
+                f"📂 คดีปกติ: {data['normal_cases']} เคส "
+                f"({data['normal_posts']} คดี)\n"
+            )
+
+        if data["point10_cases"] > 0:
+            value += (
+                f"🚨 คดีจุด 10: {data['point10_cases']} เคส "
+                f"({data['point10_posts']} คดี)\n"
+            )
+
+        # ✅ รวมทั้งหมดต่อคน (ตัวหนา)
+        total_person = data["normal_cases"] + data["point10_cases"]
+        value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
+
+        embed.add_field(
+            name=f"👤 {name}",
+            value=value,
+            inline=False
+        )
 
     embed.set_footer(text=(
-        f"📊 รวมทั้งหมด: {total_cases_all} เคส\n"
+        f"📊 รวมทั้งหมดทั้งระบบ: {total_cases_all} เคส\n"
         f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
     ))
 
