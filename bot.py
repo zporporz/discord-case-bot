@@ -215,6 +215,13 @@ def write_audit(
                 ))
     except Exception as e:
         print("❌ audit log error:", e)
+# ===== ASYNC WRAPPER (FIX AUDIT) =====
+async def write_audit_async(**kwargs):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        lambda: write_audit(**kwargs)
+    )
 
 # ======================
 # UTILS
@@ -354,10 +361,11 @@ async def backfill_recent_cases(limit_per_channel=50):
     set_last_online(now_th())
 
     print("✅ Backfill finished")
-    write_audit(
-    action="BACKFILL",
-    detail=f"limit_per_channel={limit_per_channel}"
+    await write_audit_async(
+        action="BACKFILL",
+        detail=f"limit_per_channel={limit_per_channel}"
     )
+
 
 @bot.event
 async def on_message(message):
