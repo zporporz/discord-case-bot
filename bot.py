@@ -215,9 +215,9 @@ def get_post_summary_by_name_and_date(name, date):
                 WHERE date = %s
                   AND name ILIKE %s
                   AND is_deleted = FALSE
-            """, (date, name))
+            """, (date, f"%{name}%"))  # 👈 ตรงนี้
             return cur.fetchone()
- 
+
 def count_posts_by_type(start_date, end_date=None):
     with get_conn() as conn:
         with conn.cursor() as cur:
