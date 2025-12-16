@@ -163,7 +163,35 @@ def set_last_online(dt: datetime):
                 """, (dt.isoformat(),))
     except Exception as e:
         print("❌ set_last_online error:", e)
-        
+ 
+def get_last_daily_report():
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT value FROM bot_meta WHERE key = 'last_daily_report'"
+                )
+                row = cur.fetchone()
+                return row[0] if row else None
+    except Exception as e:
+        print("❌ get_last_daily_report error:", e)
+        return None
+
+
+def set_last_daily_report(date_str: str):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO bot_meta (key, value)
+                    VALUES ('last_daily_report', %s)
+                    ON CONFLICT (key)
+                    DO UPDATE SET value = EXCLUDED.value
+                """, (date_str,))
+    except Exception as e:
+        print("❌ set_last_daily_report error:", e)
+
+ 
 def count_posts_by_type(start_date, end_date=None):
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -400,12 +428,19 @@ async def daily_today_report():
         sleep_seconds = (target - now).total_seconds()
         await asyncio.sleep(sleep_seconds)
 
-        channel = bot.get_channel(DAILY_REPORT_CHANNEL_ID)
-        if channel:
-            embed = build_today_embed()
-            await channel.send(embed=embed)
+        today_str = today_th().isoformat()
+        last_sent = get_last_daily_report()
 
-        # กันยิงซ้ำ
+        if last_sent == today_str:
+            print("ℹ️ Daily report already sent today, skip")
+        else:
+            channel = bot.get_channel(DAILY_REPORT_CHANNEL_ID)
+            if channel:
+                embed = build_today_embed()
+                await channel.send(embed=embed)
+                set_last_daily_report(today_str)
+                print("✅ Daily report sent")
+                
         await asyncio.sleep(60)
         
 @bot.event
