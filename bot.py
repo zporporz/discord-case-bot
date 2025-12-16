@@ -191,6 +191,32 @@ def set_last_daily_report(date_str: str):
     except Exception as e:
         print("❌ set_last_daily_report error:", e)
 
+def get_post_summary_by_range(start_date, end_date):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
+                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
+                FROM cases
+                WHERE date BETWEEN %s AND %s
+                  AND is_deleted = FALSE
+            """, (start_date, end_date))
+            return cur.fetchone()
+
+def get_post_summary_by_name_and_date(name, date):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
+                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
+                FROM cases
+                WHERE date = %s
+                  AND name ILIKE %s
+                  AND is_deleted = FALSE
+            """, (date, name))
+            return cur.fetchone()
  
 def count_posts_by_type(start_date, end_date=None):
     with get_conn() as conn:
@@ -252,6 +278,20 @@ async def write_audit_async(**kwargs):
         None,
         lambda: write_audit(**kwargs)
     )
+
+def get_post_summary_by_date(date):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
+                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
+                FROM cases
+                WHERE date = %s
+                  AND is_deleted = FALSE
+            """, (date,))
+            return cur.fetchone()
+
 
 # ======================
 # UTILS
@@ -371,13 +411,15 @@ def build_today_embed():
 
         value += f"📊 **รวมทั้งหมด: {d['normal_cases'] + d['point10_cases']} เคส**"
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
-
+        
+    normal_posts, point10_posts = get_post_summary_by_date(today)
     embed.set_footer(text=build_case_footer(
         normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=total_normal_posts,
+        normal_posts=normal_posts,
         point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=total_point10_posts
+        point10_posts=point10_posts
     ))
+
 
     return embed
 
@@ -853,9 +895,10 @@ async def week(ctx):
     )
 
     summary = {}
-    total_posts_all = 0
     total_normal_posts = 0
     total_point10_posts = 0
+    total_posts_all = 0
+
 
     for name, ctype, inc, total in rows:
         summary.setdefault(name, {
@@ -885,13 +928,14 @@ async def week(ctx):
         value += f"📊 **รวมทั้งหมด: {data['normal_cases'] + data['point10_cases']} เคส**"
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
+    normal_posts, point10_posts = get_post_summary_by_range(start, end)
+
     embed.set_footer(text=build_case_footer(
         normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=total_normal_posts,
+        normal_posts=normal_posts,
         point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=total_point10_posts
+        point10_posts=point10_posts
     ))
-
 
     await ctx.send(embed=embed)
 
@@ -938,12 +982,10 @@ async def check(ctx, *, keyword: str = None):
 
         if ctype == "normal":
             summary[name]["normal_cases"] += total
-            summary[name]["normal_posts"] += inc
-            total_normal_posts += inc
+            summary[name]["normal_posts"] += inc         
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
-            total_point10_posts += inc
 
         total_posts_all += inc
 
@@ -957,14 +999,16 @@ async def check(ctx, *, keyword: str = None):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
+    normal_posts, point10_posts = get_post_summary_by_name_and_date(
+        keyword, today
+    )
+
     embed.set_footer(text=build_case_footer(
         normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=total_normal_posts,
+        normal_posts=normal_posts,
         point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=total_point10_posts
+        point10_posts=point10_posts
     ))
-
-
 
     await ctx.send(embed=embed)
 
@@ -1001,8 +1045,6 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
     )
 
     total_posts_all = 0
-    total_normal_posts = 0
-    total_point10_posts = 0
     summary = {}
 
     for name, ctype, inc, total in rows:
@@ -1031,12 +1073,16 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
             value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)"
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
+        
+    normal_posts, point10_posts = get_post_summary_by_name_and_date(
+        keyword, target
+)
 
     embed.set_footer(text=build_case_footer(
         normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=total_normal_posts,
+        normal_posts=normal_posts,
         point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=total_point10_posts
+        point10_posts=point10_posts
     ))
 
     await ctx.send(embed=embed)
