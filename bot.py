@@ -32,6 +32,8 @@ NORMAL_CHANNEL_IDS = [
     1393542799617691658,
     1400477664900288576
 ]
+DAILY_REPORT_CHANNEL_ID = 1449425399397482789  # ห้องรายงาน
+
 
 TH_TZ = timezone(timedelta(hours=7))
 
@@ -286,6 +288,70 @@ def build_case_footer(
         f"🚨 คดีจุด 10: {point10_cases} เคส ({point10_posts} คดี)\n"
         f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
     )
+def build_today_embed():
+    today = today_th()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
+                FROM cases
+                WHERE date = %s
+                  AND is_deleted = FALSE
+                GROUP BY name, case_type
+            """, (today,))
+            rows = cur.fetchall()
+
+    if not rows:
+        return Embed(
+            description="📭 วันนี้ยังไม่มีคดี",
+            color=0x2f3136
+        )
+
+    embed = Embed(
+        title="📊 Case Summary — Today",
+        description=f"📅 วันที่: {today.strftime('%d/%m/%Y')}",
+        color=0x2ecc71
+    )
+
+    summary = {}
+    total_normal_posts = 0
+    total_point10_posts = 0
+
+    for name, ctype, inc, total in rows:
+        summary.setdefault(name, {
+            "normal_cases": 0, "normal_posts": 0,
+            "point10_cases": 0, "point10_posts": 0
+        })
+
+        if ctype == "normal":
+            summary[name]["normal_cases"] += total
+            summary[name]["normal_posts"] += inc
+            total_normal_posts += inc
+        else:
+            summary[name]["point10_cases"] += total
+            summary[name]["point10_posts"] += inc
+            total_point10_posts += inc
+
+    for name in sorted(summary.keys(), key=normalize_name):
+        d = summary[name]
+        value = ""
+        if d["normal_cases"]:
+            value += f"📂 คดีปกติ: {d['normal_cases']} เคส ({d['normal_posts']} คดี)\n"
+        if d["point10_cases"]:
+            value += f"🚨 คดีจุด 10: {d['point10_cases']} เคส ({d['point10_posts']} คดี)\n"
+
+        value += f"📊 **รวมทั้งหมด: {d['normal_cases'] + d['point10_cases']} เคส**"
+        embed.add_field(name=f"👤 {name}", value=value, inline=False)
+
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(v["normal_cases"] for v in summary.values()),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+        point10_posts=total_point10_posts
+    ))
+
+    return embed
 
 # ======================
 # DISCORD SETUP
@@ -317,6 +383,31 @@ async def on_command_error(ctx, error):
 # ======================
 # EVENTS
 # ======================
+
+async def daily_today_report():
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        now = now_th()
+
+        target = now.replace(
+            hour=23, minute=59, second=0, microsecond=0
+        )
+
+        if now >= target:
+            target += timedelta(days=1)
+
+        sleep_seconds = (target - now).total_seconds()
+        await asyncio.sleep(sleep_seconds)
+
+        channel = bot.get_channel(DAILY_REPORT_CHANNEL_ID)
+        if channel:
+            embed = build_today_embed()
+            await channel.send(embed=embed)
+
+        # กันยิงซ้ำ
+        await asyncio.sleep(60)
+        
 @bot.event
 async def on_ready():
     print(f"🤖 Bot online: {bot.user}")
@@ -325,6 +416,8 @@ async def on_ready():
     await asyncio.sleep(10)
 
     asyncio.create_task(backfill_recent_cases())
+    asyncio.create_task(daily_today_report())
+
 
 
 async def backfill_recent_cases(limit_per_channel=50):
@@ -554,94 +647,13 @@ async def on_message_edit(before, after):
         detail=f"mentions={len(unique_members)}"
     )
 
-
 # ======================
 # COMMANDS
 # ======================
 
 @bot.command()
 async def today(ctx):
-    today = today_th()
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
-                FROM cases
-                WHERE date = %s
-                  AND is_deleted = FALSE
-                GROUP BY name, case_type
-            """, (today,))
-            rows = cur.fetchall()
-
-    if not rows:
-        await ctx.send(embed=Embed(
-            description="📭 วันนี้ยังไม่มีคดี",
-            color=0x2f3136
-        ))
-        return
-
-    embed = Embed(
-        title="📊 Case Summary — Today",
-        description=f"📅 วันที่: {today.strftime('%d/%m/%Y')}",
-        color=0x2ecc71
-    )
-
-    summary = {}
-
-    # ✅ footer = คดี (โพส)
-    total_posts_all = 0
-    total_normal_posts = 0
-    total_point10_posts = 0
-
-    for name, ctype, inc, total in rows:
-        if name not in summary:
-            summary[name] = {
-                "normal_cases": 0,
-                "normal_posts": 0,
-                "point10_cases": 0,
-                "point10_posts": 0
-            }
-
-        if ctype == "normal":
-            summary[name]["normal_cases"] += total        # เคส
-            summary[name]["normal_posts"] += inc          # คดี
-            total_normal_posts += inc
-        else:
-            summary[name]["point10_cases"] += total
-            summary[name]["point10_posts"] += inc
-            total_point10_posts += inc
-
-        total_posts_all += inc   # ❗ นับโพสเท่านั้น
-
-    # ===== แสดงรายคน (ยังเป็นเคส) =====
-    for name in sorted(summary.keys(), key=normalize_name):
-        data = summary[name]
-        value = ""
-
-        if data["normal_cases"] > 0:
-            value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
-
-        if data["point10_cases"] > 0:
-            value += f"🚨 คดีจุด 10: {data['point10_cases']} เคส ({data['point10_posts']} คดี)\n"
-
-        total_person = data["normal_cases"] + data["point10_cases"]
-        value += f"📊 **รวมทั้งหมด: {total_person} เคส**"
-
-        embed.add_field(
-            name=f"👤 {name}",
-            value=value,
-            inline=False
-        )
-
-    # ===== footer = คดี (โพส) =====
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=total_normal_posts,
-        point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=total_point10_posts
-    ))
-    
+    embed = build_today_embed()
     await ctx.send(embed=embed)
 
 @bot.command()
