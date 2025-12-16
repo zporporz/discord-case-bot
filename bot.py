@@ -10,6 +10,8 @@ from discord.ext import commands
 from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
+import asyncio
+
 ALLOWED_COMMAND_CHANNELS = {
     1449425399397482789,  # ห้องคำสั่งหลัก
     1450143956519227473,   # ห้อง audit
@@ -82,6 +84,26 @@ def save_case_pg(
         )
     except Exception as e:
         print("❌ DB error:", e)
+        
+async def save_case_async(
+    name: str,
+    channel: str,
+    case_type: str,
+    cases: int,
+    message_id: int,
+    message_date
+):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        save_case_pg,
+        name,
+        channel,
+        case_type,
+        cases,
+        message_id,
+        message_date
+    )
 
 def is_message_saved(message_id: int) -> bool:
     try:
@@ -214,14 +236,17 @@ def process_case_message(message):
     unique_members = set(message.mentions)
 
     for member in unique_members:
-        save_case_pg(
-            member.display_name,
-            message.channel.name,
-            case_type,
-            case_value,
-            message.id,
-            message_date
+        asyncio.create_task(
+            save_case_async(
+                member.display_name,
+                message.channel.name,
+                case_type,
+                case_value,
+                message.id,
+                message_date
+            )
         )
+
 
 def now_th():
     return datetime.now(TH_TZ)
@@ -359,14 +384,17 @@ async def on_message(message):
         )
 
     for member in unique_members:
-        save_case_pg(
-            member.display_name,
-            message.channel.name,
-            case_type,
-            case_value,
-            message.id,
-            message_date
+        asyncio.create_task(
+            save_case_async(
+                member.display_name,
+                message.channel.name,
+                case_type,
+                case_value,
+                message.id,
+                message_date
+            )
         )
+
 
 @bot.event
 async def on_message_delete(message):
@@ -481,14 +509,17 @@ async def on_message_edit(before, after):
     unique_members = set(after.mentions)
 
     for member in unique_members:
-        save_case_pg(
-            member.display_name,
-            after.channel.name,
-            case_type,
-            case_value,
-            after.id,
-            message_date
+        asyncio.create_task(
+            save_case_async(
+                member.display_name,
+                after.channel.name,
+                case_type,
+                case_value,
+                after.id,
+                message_date
+            )
         )
+
 
     print(f"✅ Recounted cases | msg={after.id}")
 
