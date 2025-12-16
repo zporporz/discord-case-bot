@@ -12,7 +12,8 @@ from discord import Embed
 from datetime import timezone
 ALLOWED_COMMAND_CHANNELS = {
     1449425399397482789,  # ห้องคำสั่งหลัก
-    1450143956519227473   # ห้อง audit
+    1450143956519227473,   # ห้อง audit
+    1450360666127863919
 }
 
 # ======================
@@ -264,10 +265,12 @@ async def restrict_commands_to_channel(ctx):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CheckFailure):
-        await ctx.send(
-            "❌ ใช้คำสั่งบอทได้เฉพาะห้องที่กำหนดเท่านั้น",
-            delete_after=5
-        )
+        try:
+            await ctx.author.send(
+                "❌ ใช้คำสั่งบอทได้เฉพาะห้องที่กำหนดเท่านั้น"
+            )
+        except:
+            pass
 
 # ======================
 # EVENTS
