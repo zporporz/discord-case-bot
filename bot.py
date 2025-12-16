@@ -15,8 +15,6 @@ ALLOWED_COMMAND_CHANNELS = {
     1450143956519227473   # ห้อง audit
 }
 
-
-
 # ======================
 # ENV / CONSTANTS
 # ======================
@@ -245,7 +243,6 @@ def build_case_footer(
         f"🚨 คดีจุด 10: {point10_cases} เคส ({point10_posts} คดี)\n"
         f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
     )
-    
 
 # ======================
 # DISCORD SETUP
@@ -1001,46 +998,47 @@ async def posts(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command()
-async def audit(ctx, limit: int = 10):
-    limit = max(1, min(limit, 20))
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT action, actor, target, channel, message_id, detail, created_at
-                FROM audit_logs
-                ORDER BY created_at DESC
-                LIMIT %s
-            """, (limit,))
-            rows = cur.fetchall()
-
-    if not rows:
-        await ctx.send("📭 ยังไม่มี audit log")
-        return
-
-    embed = Embed(
-        title="🧾 Audit Log",
-        description=f"แสดง {len(rows)} รายการล่าสุด",
-        color=0xe67e22
-    )
-
-    for action, actor, target, channel, msg_id, detail, created in rows:
-        time_str = created.astimezone(TH_TZ).strftime("%d/%m %H:%M")
-        embed.add_field(
-            name=f"🔹 {action}",
-            value=(
-                f"👤 {actor or '-'}\n"
-                f"🎯 {target or '-'}\n"
-                f"📍 {channel or '-'}\n"
-                f"🆔 `{msg_id or '-'}`\n"
-                f"📝 {detail or '-'}\n"
-                f"🕒 {time_str}"
-            ),
-            inline=False
-        )
-
-    await ctx.send(embed=embed)
+#@bot.command()
+#async def audit(ctx, limit: int = 10):
+#    limit = max(1, min(limit, 20))
+#
+#    with get_conn() as conn:
+#        with conn.cursor() as cur:
+#            cur.execute("""
+#                SELECT action, actor, target, channel, message_id, detail, created_at
+#                FROM audit_logs
+#                ORDER BY created_at DESC
+#                LIMIT %s
+#            """, (limit,))
+#            rows = cur.fetchall()
+#
+#    if not rows:
+#        await ctx.send("📭 ยังไม่มี audit log")
+#        return
+#
+#    embed = Embed(
+#        title="🧾 Audit Log",
+#        description=f"แสดง {len(rows)} รายการล่าสุด",
+#        color=0xe67e22
+#    )
+#
+#    for action, actor, target, channel, msg_id, detail, created in rows:
+#        time_str = created.astimezone(TH_TZ).strftime("%d/%m %H:%M")
+#        embed.add_field(
+#            name=f"🔹 {action}",
+#            value=(
+#                f"👤 {actor or '-'}\n"
+#                f"🎯 {target or '-'}\n"
+#                f"📍 {channel or '-'}\n"
+#                f"🆔 `{msg_id or '-'}`\n"
+#                f"📝 {detail or '-'}\n"
+#                f"🕒 {time_str}"
+#            ),
+#            inline=False
+#        )
+#
+#    await ctx.send(embed=embed)
 
 # ======================
 # CMD HELP (สำคัญ)
@@ -1160,6 +1158,7 @@ async def confirm(ctx, password: str):
 # ======================
 # REGISTER AUDIT COMMANDS
 # ======================
+setup_audit_commands(bot, get_conn, is_pbt)   
 # ======================
 # RUN
 # ======================
