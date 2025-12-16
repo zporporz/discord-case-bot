@@ -229,6 +229,23 @@ def now_th():
 
 def today_th():
     return now_th().date()
+    
+def build_case_footer(
+    normal_cases,
+    normal_posts,
+    point10_cases,
+    point10_posts
+):
+    total_cases = normal_cases + point10_cases
+    total_posts = normal_posts + point10_posts
+
+    return (
+        f"📊 รวมทั้งหมด: {total_cases} เคส | {total_posts} คดี\n"
+        f"📂 คดีปกติ: {normal_cases} เคส ({normal_posts} คดี)\n"
+        f"🚨 คดีจุด 10: {point10_cases} เคส ({point10_posts} คดี)\n"
+        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+    )
+    
 
 # ======================
 # DISCORD SETUP
@@ -544,7 +561,8 @@ async def today(ctx):
         total_posts_all += inc   # ❗ นับโพสเท่านั้น
 
     # ===== แสดงรายคน (ยังเป็นเคส) =====
-    for name, data in summary.items():
+    for name in sorted(summary.keys(), key=normalize_name):
+        data = summary[name]
         value = ""
 
         if data["normal_cases"] > 0:
@@ -563,13 +581,13 @@ async def today(ctx):
         )
 
     # ===== footer = คดี (โพส) =====
-    embed.set_footer(text=(
-        f"📊 รวมทั้งหมดทั้งระบบ: {total_posts_all} คดี\n"
-        f"📂 คดีปกติ: {total_normal_posts} คดี | "
-        f"🚨 คดีจุด 10: {total_point10_posts} คดี\n"
-        f"🔒 ระบบป้องกันการนับซ้ำอัตโนมัติ"
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(v["normal_cases"] for v in summary.values()),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+        point10_posts=total_point10_posts
     ))
-
+    
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -620,10 +638,11 @@ async def me(ctx):
         else:
             total_point10_posts += inc
 
-    embed.set_footer(text=(
-        f"📊 รวมทั้งหมด: {total_posts_all} คดี\n"
-        f"📂 คดีปกติ: {total_normal_posts} คดี | "
-        f"🚨 คดีจุด 10: {total_point10_posts} คดี"
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(total for ctype, inc, total in rows if ctype == "normal"),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(total for ctype, inc, total in rows if ctype != "normal"),
+        point10_posts=total_point10_posts
     ))
 
     await ctx.send(embed=embed)
@@ -695,10 +714,11 @@ async def date(ctx, date_str: str):
         value += f"📊 **รวมทั้งหมด: {data['normal_cases'] + data['point10_cases']} เคส**"
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=(
-        f"📊 รวมทั้งหมดทั้งระบบ: {total_posts_all} คดี\n"
-        f"📂 คดีปกติ: {total_normal_posts} คดี | "
-        f"🚨 คดีจุด 10: {total_point10_posts} คดี"
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(v["normal_cases"] for v in summary.values()),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+        point10_posts=total_point10_posts
     ))
 
     await ctx.send(embed=embed)
@@ -753,7 +773,8 @@ async def week(ctx):
 
         total_posts_all += inc
 
-    for name, data in summary.items():
+    for name in sorted(summary.keys(), key=normalize_name):
+        data = summary[name]
         value = ""
         if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
@@ -763,11 +784,13 @@ async def week(ctx):
         value += f"📊 **รวมทั้งหมด: {data['normal_cases'] + data['point10_cases']} เคส**"
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=(
-        f"📊 รวมทั้งหมดทั้งระบบ: {total_posts_all} คดี\n"
-        f"📂 คดีปกติ: {total_normal_posts} คดี | "
-        f"🚨 คดีจุด 10: {total_point10_posts} คดี"
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(v["normal_cases"] for v in summary.values()),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+        point10_posts=total_point10_posts
     ))
+
 
     await ctx.send(embed=embed)
 
@@ -823,7 +846,8 @@ async def check(ctx, *, keyword: str = None):
 
         total_posts_all += inc
 
-    for name, data in summary.items():
+    for name in sorted(summary.keys(), key=normalize_name):
+        data = summary[name]
         value = ""
         if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
@@ -832,9 +856,13 @@ async def check(ctx, *, keyword: str = None):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(
-    text=f"📊 รวมทั้งหมด: {total_posts_all} คดี | 📂 {total_normal_posts} | 🚨 {total_point10_posts}"
-    )
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(v["normal_cases"] for v in summary.values()),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+        point10_posts=total_point10_posts
+    ))
+
 
 
     await ctx.send(embed=embed)
@@ -893,7 +921,8 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
 
         total_posts_all += inc
 
-    for name, data in summary.items():
+    for name in sorted(summary.keys(), key=normalize_name):
+    data = summary[name]
         value = ""
         if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
@@ -902,9 +931,12 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
 
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(
-    text=f"📊 รวมทั้งหมด: {total_posts_all} คดี | 📂 {total_normal_posts} | 🚨 {total_point10_posts}"
-    )
+    embed.set_footer(text=build_case_footer(
+        normal_cases=sum(v["normal_cases"] for v in summary.values()),
+        normal_posts=total_normal_posts,
+        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+        point10_posts=total_point10_posts
+    ))
 
     await ctx.send(embed=embed)
 
