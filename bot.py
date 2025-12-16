@@ -1056,11 +1056,9 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
         if ctype == "normal":
             summary[name]["normal_cases"] += total
             summary[name]["normal_posts"] += inc
-            total_normal_posts += inc
         else:
             summary[name]["point10_cases"] += total
             summary[name]["point10_posts"] += inc
-            total_point10_posts += inc
 
         total_posts_all += inc
 
@@ -1076,7 +1074,7 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
         
     normal_posts, point10_posts = get_post_summary_by_name_and_date(
         keyword, target
-)
+    )
 
     embed.set_footer(text=build_case_footer(
         normal_cases=sum(v["normal_cases"] for v in summary.values()),
