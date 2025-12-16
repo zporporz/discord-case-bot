@@ -922,7 +922,7 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
         total_posts_all += inc
 
     for name in sorted(summary.keys(), key=normalize_name):
-    data = summary[name]
+        data = summary[name]
         value = ""
         if data["normal_cases"]:
             value += f"📂 คดีปกติ: {data['normal_cases']} เคส ({data['normal_posts']} คดี)\n"
