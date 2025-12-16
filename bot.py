@@ -117,6 +117,16 @@ def is_message_saved(message_id: int) -> bool:
     except Exception as e:
         print("❌ DB check error:", e)
         return True  # กันพลาด ไม่ insert ซ้ำ
+        
+# ===== ASYNC WRAPPER (FIX 2) =====
+async def is_message_saved_async(message_id: int) -> bool:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None,
+        is_message_saved,   # ← เรียกของเดิม
+        message_id
+    )
+        
 
 def get_last_online():
     try:
@@ -303,7 +313,12 @@ async def on_command_error(ctx, error):
 @bot.event
 async def on_ready():
     print(f"🤖 Bot online: {bot.user}")
-    await backfill_recent_cases()
+
+    # ปล่อยให้ bot stable ก่อน
+    await asyncio.sleep(10)
+
+    asyncio.create_task(backfill_recent_cases())
+
 
 async def backfill_recent_cases(limit_per_channel=50):
     print("🔄 Backfill started")
@@ -324,7 +339,7 @@ async def backfill_recent_cases(limit_per_channel=50):
             if last_online and msg.created_at.astimezone(TH_TZ) <= last_online:
                 continue
 
-            if is_message_saved(msg.id):
+            if await is_message_saved_async(msg.id):
                 continue
 
             process_case_message(msg)
