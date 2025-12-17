@@ -21,9 +21,9 @@ ALLOWED_COMMAND_CHANNELS = {
 DASHBOARD_CHANNEL_ID = 1450794312026685573
 DASHBOARD_REACTIONS = [
     "📊", "🚨", "👮", "✅", "🔄",
-    "📈", "🕒", "🛡️", "⚡", "📌"
+    "📈", "🕒", "🛡️", "⚡", "📌",
+    "🔥", "💥", "📣", "🧠", "👀"
 ]
-
 
 # ======================
 # ENV / CONSTANTS
@@ -317,7 +317,7 @@ def get_today_summary():
             return normal, point10, total
 import random
 
-async def random_react_dashboard(msg, count=3):
+async def random_react_dashboard(msg, count=5):
     try:
         # ลบ reaction เก่า (ถ้าอยากให้โล่ง)
         await msg.clear_reactions()
@@ -567,10 +567,21 @@ async def dashboard_updater():
 
         try:
             if msg_id:
-                msg = await channel.fetch_message(msg_id)
+                try:
+                    # 🔍 พยายามดึง message เดิม
+                    msg = await channel.fetch_message(msg_id)
+                except discord.NotFound:
+                    # ❌ message ถูกลบ แต่ DB ยังจำอยู่
+                    print("⚠️ Dashboard message not found, recreating")
+                    msg = await channel.send(embed=embed)
+                    await msg.pin()
+                    set_dashboard_message_id(msg.id)
+
                 await msg.edit(embed=embed)
                 await random_react_dashboard(msg, count=3)
+
             else:
+                # 🆕 ยังไม่เคยมี dashboard
                 msg = await channel.send(embed=embed)
                 await msg.pin()
                 await random_react_dashboard(msg, count=3)
