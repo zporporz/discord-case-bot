@@ -591,11 +591,11 @@ async def dashboard_updater():
             if msg_id:
                 msg = await channel.fetch_message(msg_id)
                 await msg.edit(embed=embed)
-                await random_react_dashboard(msg, count=3)
+                await random_react_dashboard(msg, count=5)
             else:
                 msg = await channel.send(embed=embed)
                 await msg.pin()
-                await random_react_dashboard(msg, count=3)
+                await random_react_dashboard(msg, count=5)
                 set_dashboard_message_id(msg.id)
 
         except Exception as e:
