@@ -541,12 +541,18 @@ async def backfill_recent_cases(limit_per_channel=50):
     last_online = get_last_online()
     now = now_th()
 
+    checked = 0
+    found = 0
+    recovered = 0
+
     for channel_id in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
         channel = bot.get_channel(channel_id)
         if not channel:
             continue
 
         async for msg in channel.history(limit=limit_per_channel):
+            checked += 1
+
             if msg.author.bot or not msg.mentions:
                 continue
 
@@ -554,10 +560,13 @@ async def backfill_recent_cases(limit_per_channel=50):
             if last_online and msg.created_at.astimezone(TH_TZ) <= last_online:
                 continue
 
+            found += 1
+
             if await is_message_saved_async(msg.id):
                 continue
 
             process_case_message(msg)
+            recovered += 1
 
             print(
                 f"🧩 Backfilled | "
@@ -571,7 +580,11 @@ async def backfill_recent_cases(limit_per_channel=50):
     print("✅ Backfill finished")
     await write_audit_async(
         action="BACKFILL",
-        detail=f"limit_per_channel={limit_per_channel}"
+        detail=(
+            f"checked={checked} "
+            f"found={found} "
+            f"recovered={recovered}"
+        )
     )
 
 async def recovery_backfill(limit_per_channel=200):
