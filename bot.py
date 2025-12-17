@@ -11,6 +11,7 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
+SYSTEM_FOOTER = "Created by Lion Kuryu • Police Case Management System"
 
 ALLOWED_COMMAND_CHANNELS = {
     1449425399397482789,  # ห้องคำสั่งหลัก
@@ -371,10 +372,13 @@ def build_today_embed():
             rows = cur.fetchall()
 
     if not rows:
-        return Embed(
+        embed = Embed(
             description="📭 วันนี้ยังไม่มีคดี",
             color=0x2f3136
         )
+        embed.set_footer(text=SYSTEM_FOOTER)
+        return embed
+
 
     embed = Embed(
         title="📊 Case Summary — Today",
@@ -413,13 +417,18 @@ def build_today_embed():
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
         
     normal_posts, point10_posts = get_post_summary_by_date(today)
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=normal_posts,
-        point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=point10_posts
-    ))
-
+    embed.set_footer(
+        text=(
+            build_case_footer(
+                normal_cases=sum(v["normal_cases"] for v in summary.values()),
+                normal_posts=normal_posts,
+                point10_cases=sum(v["point10_cases"] for v in summary.values()),
+                point10_posts=point10_posts
+            )
+            + "\n"
+            + SYSTEM_FOOTER
+        )
+    )
 
     return embed
 
@@ -840,10 +849,12 @@ async def me(ctx):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send(embed=Embed(
+        embed = Embed(
             description="📭 วันนี้คุณยังไม่มีคดี",
             color=0x2f3136
-        ))
+        )
+        embed.set_footer(text=SYSTEM_FOOTER)
+        await ctx.send(embed=embed)
         return
 
     embed = Embed(
@@ -870,12 +881,14 @@ async def me(ctx):
         else:
             total_point10_posts += inc
 
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(total for ctype, inc, total in rows if ctype == "normal"),
-        normal_posts=total_normal_posts,
-        point10_cases=sum(total for ctype, inc, total in rows if ctype != "normal"),
-        point10_posts=total_point10_posts
-    ))
+    embed.set_footer(
+        text=build_case_footer(
+            normal_cases=sum(total for ctype, inc, total in rows if ctype == "normal"),
+            normal_posts=total_normal_posts,
+            point10_cases=sum(total for ctype, inc, total in rows if ctype != "normal"),
+            point10_posts=total_point10_posts
+        ) + "\n" + SYSTEM_FOOTER
+    )
 
     await ctx.send(embed=embed)
 
@@ -946,12 +959,14 @@ async def date(ctx, date_str: str):
         value += f"📊 **รวมทั้งหมด: {data['normal_cases'] + data['point10_cases']} เคส**"
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
 
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=total_normal_posts,
-        point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=total_point10_posts
-    ))
+    embed.set_footer(
+        text=build_case_footer(
+            normal_cases=sum(v["normal_cases"] for v in summary.values()),
+            normal_posts=total_normal_posts,
+            point10_cases=sum(v["point10_cases"] for v in summary.values()),
+            point10_posts=total_point10_posts
+        ) + "\n" + SYSTEM_FOOTER
+    )
 
     await ctx.send(embed=embed)
 
@@ -1019,13 +1034,14 @@ async def week(ctx):
 
     normal_posts, point10_posts = get_post_summary_by_range(start, end)
 
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=normal_posts,
-        point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=point10_posts
-    ))
-
+    embed.set_footer(
+        text=build_case_footer(
+            normal_cases=sum(v["normal_cases"] for v in summary.values()),
+            normal_posts=normal_posts,
+            point10_cases=sum(v["point10_cases"] for v in summary.values()),
+            point10_posts=point10_posts
+        ) + "\n" + SYSTEM_FOOTER
+    )
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -1092,13 +1108,14 @@ async def check(ctx, *, keyword: str = None):
         keyword, today
     )
 
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=normal_posts,
-        point10_cases=sum(v["point10_cases"] for v in summary.values()),
+    embed.set_footer(
+        text=build_case_footer(
+            normal_cases=sum(v["normal_cases"] for v in summary.values()),
+            normal_posts=normal_posts,
+            point10_cases=sum(v["point10_cases"] for v in summary.values()),
         point10_posts=point10_posts
-    ))
-
+        ) + "\n" + SYSTEM_FOOTER
+    )
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -1165,13 +1182,14 @@ async def checkdate(ctx, date_str: str, *, keyword: str):
         keyword, target
     )
 
-    embed.set_footer(text=build_case_footer(
-        normal_cases=sum(v["normal_cases"] for v in summary.values()),
-        normal_posts=normal_posts,
-        point10_cases=sum(v["point10_cases"] for v in summary.values()),
-        point10_posts=point10_posts
-    ))
-
+    embed.set_footer(
+        text=build_case_footer(
+            normal_cases=sum(v["normal_cases"] for v in summary.values()),
+            normal_posts=normal_posts,
+            point10_cases=sum(v["point10_cases"] for v in summary.values()),
+            point10_posts=point10_posts
+        ) + "\n" + SYSTEM_FOOTER
+    )
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -1192,7 +1210,9 @@ async def time(ctx):
         value="UTC+7 (Asia/Bangkok)",
         inline=False
     )
+    embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
+
 
 @bot.command()
 async def posts(ctx):
@@ -1231,7 +1251,12 @@ async def posts(ctx):
         inline=False
     )
 
-    embed.set_footer(text="🔒 นับจากโพสจริง (message_id) | แท็กซ้ำไม่นับ")
+    embed.set_footer(
+        text=(
+            "🔒 นับจากโพสจริง (message_id) | แท็กซ้ำไม่นับ\n"
+            + SYSTEM_FOOTER
+        )
+    )
 
     await ctx.send(embed=embed)
 
@@ -1356,7 +1381,9 @@ async def cmd(ctx):
             inline=False
         )
 
+    embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
+
 
 # ======================
 # RESET DB
