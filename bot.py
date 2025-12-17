@@ -533,8 +533,8 @@ def build_dashboard_embed():
     embed.add_field(
         name="📈 Summary Today",
         value=(
-            f"📂 คดีปกติ: {normal} เคส\n"
-            f"🚨 คดีจุด 10: {point10} เคส\n"
+            f"📂 คดีปกติ: {normal} เคส ({normal_posts} คดี)\n"
+            f"🚨 คดีจุด 10: {point10} เคส ({point10_posts} คดี)\n"
             f"📊 รวมทั้งหมด: **{total} เคส**"
         ),
         inline=False
