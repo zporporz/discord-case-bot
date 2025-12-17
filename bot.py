@@ -1325,8 +1325,10 @@ async def cmd(ctx):
             name="🧾 Audit / ตรวจสอบระบบ (ผบตร.)",
             value=(
                 "`!audit person` — ตรวจสอบการแท็กชื่อซ้ำในโพสเดียวกัน\n"
-                "`!audit export DD/MM/YYYY` — export audit log รายวัน (CSV)\n"
-                "`!audit export DD/MM/YYYY DD/MM/YYYY` — export audit log ตามช่วงวัน\n"
+                "`!audit export DD/MM/YYYY` — export audit log (CSV + Excel)\n"
+                "`!audit export DD/MM/YYYY DD/MM/YYYY` — export audit log ตามช่วงวัน (CSV + Excel)\n"
+                "`!audit export csv DD/MM/YYYY [DD/MM/YYYY]` — export เฉพาะ CSV\n"
+                "`!audit export excel DD/MM/YYYY [DD/MM/YYYY]` — export เฉพาะ Excel\n"
                 "  ↳ ใช้ได้เฉพาะห้อง **audit**"
             ),
             inline=False
