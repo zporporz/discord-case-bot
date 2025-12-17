@@ -35,7 +35,6 @@ NORMAL_CHANNEL_IDS = [
 ]
 DAILY_REPORT_CHANNEL_ID = 1449425399397482789  # ห้องรายงาน
 
-
 TH_TZ = timezone(timedelta(hours=7))
 
 # ======================
@@ -45,7 +44,6 @@ def is_pbt():
     async def predicate(ctx):
         return any(role.id == PBT_ROLE_ID for role in ctx.author.roles)
     return commands.check(predicate)
-
 
 # ======================
 # DB HELPERS
@@ -128,8 +126,7 @@ async def is_message_saved_async(message_id: int) -> bool:
         None,
         is_message_saved,   # ← เรียกของเดิม
         message_id
-    )
-        
+    )      
 
 def get_last_online():
     try:
