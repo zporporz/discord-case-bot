@@ -18,6 +18,12 @@ ALLOWED_COMMAND_CHANNELS = {
     1450143956519227473,   # ห้อง audit
     1450364332784353281
 }
+DASHBOARD_CHANNEL_ID = 1450794312026685573
+DASHBOARD_REACTIONS = [
+    "📊", "🚨", "👮", "✅", "🔄",
+    "📈", "🕒", "🛡️", "⚡", "📌"
+]
+
 
 # ======================
 # ENV / CONSTANTS
@@ -290,6 +296,42 @@ def get_post_summary_by_date(date):
             """, (date,))
             return cur.fetchone()
 
+def get_today_summary():
+    today = today_th()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    SUM(cases) FILTER (WHERE case_type = 'normal') AS normal_cases,
+                    SUM(cases) FILTER (WHERE case_type = 'case10') AS point10_cases
+                FROM cases
+                WHERE date = %s
+                  AND is_deleted = FALSE
+            """, (today,))
+            row = cur.fetchone()
+
+            normal = row[0] or 0
+            point10 = row[1] or 0
+            total = normal + point10
+
+            return normal, point10, total
+import random
+
+async def random_react_dashboard(msg, count=3):
+    try:
+        # ลบ reaction เก่า (ถ้าอยากให้โล่ง)
+        await msg.clear_reactions()
+
+        emojis = random.sample(
+            DASHBOARD_REACTIONS,
+            k=min(count, len(DASHBOARD_REACTIONS))
+        )
+
+        for e in emojis:
+            await msg.add_reaction(e)
+
+    except Exception as e:
+        print("⚠️ reaction error:", e)
 
 # ======================
 # UTILS
@@ -429,6 +471,116 @@ def build_today_embed():
 
     return embed
 
+def get_top_officers_today(limit=5):
+    today = today_th()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT name, SUM(cases) AS total_cases
+                FROM cases
+                WHERE date = %s
+                  AND is_deleted = FALSE
+                GROUP BY name
+                ORDER BY total_cases DESC
+                LIMIT %s
+            """, (today, limit))
+            return cur.fetchall()
+
+def build_top_officers_text(limit=5):
+    rows = get_top_officers_today(limit)
+
+    if not rows:
+        return "ยังไม่มีข้อมูล"
+
+    medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
+    lines = []
+
+    for i, (name, total) in enumerate(rows):
+        medal = medals[i] if i < len(medals) else "👮"
+        lines.append(f"{medal} {name} — {total} เคส")
+
+    return "\n".join(lines)
+ 
+ 
+def build_dashboard_embed():
+    normal, point10, total = get_today_summary()
+
+    embed = Embed(
+        title="📊 Police Case Management Dashboard",
+        description=(
+            f"📅 วันที่: {today_th().strftime('%d/%m/%Y')}\n"
+            f"⏱️ อัพเดทล่าสุด: {now_th().strftime('%H:%M')}"
+        ),
+        color=0x3498db
+    )
+
+    embed.add_field(
+        name="📈 Summary Today",
+        value=(
+            f"📂 คดีปกติ: {normal} เคส\n"
+            f"🚨 คดีจุด 10: {point10} เคส\n"
+            f"📊 รวมทั้งหมด: **{total} เคส**"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="👮 Top Officers (Today)",
+        value=build_top_officers_text(),
+        inline=False
+    )
+
+    embed.set_footer(
+        text=f"🔄 อัพเดททุก 15 นาที\n{SYSTEM_FOOTER}"
+    )
+
+    return embed
+
+
+def get_dashboard_message_id():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT value FROM bot_meta
+                WHERE key = 'dashboard_message_id'
+            """)
+            row = cur.fetchone()
+            return int(row[0]) if row else None
+
+def set_dashboard_message_id(msg_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO bot_meta (key, value)
+                VALUES ('dashboard_message_id', %s)
+                ON CONFLICT (key)
+                DO UPDATE SET value = EXCLUDED.value
+            """, (str(msg_id),))
+
+async def dashboard_updater():
+    await bot.wait_until_ready()
+    channel = bot.get_channel(DASHBOARD_CHANNEL_ID)
+
+    while not bot.is_closed():
+        embed = build_dashboard_embed()
+        msg_id = get_dashboard_message_id()
+
+        try:
+            if msg_id:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed)
+                await random_react_dashboard(msg, count=3)
+            else:
+                msg = await channel.send(embed=embed)
+                await msg.pin()
+                await random_react_dashboard(msg, count=3)
+                set_dashboard_message_id(msg.id)
+
+        except Exception as e:
+            print("❌ Dashboard update error:", e)
+
+        await asyncio.sleep(15 * 60)
+
 # ======================
 # DISCORD SETUP
 # ======================
@@ -503,6 +655,8 @@ async def on_ready():
 
     # daily report เหมือนเดิม
     asyncio.create_task(daily_today_report())
+    
+    asyncio.create_task(dashboard_updater()) 
 
 
 def get_last_checked_time():
