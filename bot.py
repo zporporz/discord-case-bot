@@ -520,6 +520,7 @@ def build_top_officers_text(limit=5):
  
 def build_dashboard_embed():
     normal, point10, total = get_today_summary()
+    normal_posts, point10_posts = get_post_summary_by_date(today_th())
 
     embed = Embed(
         title="📊 Police Case Management Dashboard",
