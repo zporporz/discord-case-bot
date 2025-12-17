@@ -489,12 +489,50 @@ async def daily_today_report():
 async def on_ready():
     print(f"🤖 Bot online: {bot.user}")
 
-    # ปล่อยให้ bot stable ก่อน
-    await asyncio.sleep(10)
+    # รอให้ bot stable
+    await asyncio.sleep(5)
 
-    asyncio.create_task(backfill_recent_cases())
+    # ✅ เชคโพสช่วง offline
+    asyncio.create_task(recovery_backfill())
+
+    # daily report เหมือนเดิม
     asyncio.create_task(daily_today_report())
 
+
+def get_last_checked_time():
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT value FROM bot_meta
+                    WHERE key = 'last_checked_message_time'
+                """)
+                row = cur.fetchone()
+                if not row:
+                    return None
+
+                dt = datetime.fromisoformat(row[0])
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=TH_TZ)
+
+                return dt
+    except Exception as e:
+        print("❌ get_last_checked_time error:", e)
+        return None
+
+
+def set_last_checked_time(dt: datetime):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO bot_meta (key, value)
+                    VALUES ('last_checked_message_time', %s)
+                    ON CONFLICT (key)
+                    DO UPDATE SET value = EXCLUDED.value
+                """, (dt.isoformat(),))
+    except Exception as e:
+        print("❌ set_last_checked_time error:", e)
 
 
 async def backfill_recent_cases(limit_per_channel=50):
@@ -536,6 +574,44 @@ async def backfill_recent_cases(limit_per_channel=50):
         detail=f"limit_per_channel={limit_per_channel}"
     )
 
+async def recovery_backfill(limit_per_channel=200):
+    print("🔄 Recovery backfill started")
+
+    last_time = get_last_checked_time()
+    now = now_th()
+
+    # ถ้าไม่เคยเชคมาก่อน → ย้อนหลัง 1 วัน (กันพลาด deploy แรก)
+    if not last_time:
+        last_time = now - timedelta(days=1)
+        print("ℹ️ No last_checked_time, fallback 1 day")
+
+    for channel_id in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            continue
+
+        async for msg in channel.history(
+            limit=limit_per_channel,
+            after=last_time
+        ):
+            if msg.author.bot or not msg.mentions:
+                continue
+
+            # กันซ้ำด้วย DB (ของคุณมีอยู่แล้ว)
+            if await is_message_saved_async(msg.id):
+                continue
+
+            process_case_message(msg)
+
+            print(
+                f"🧩 Recovered | "
+                f"msg={msg.id} | "
+                f"channel={channel.name}"
+            )
+
+    # อัปเดต checkpoint หลังเชคเสร็จ
+    set_last_checked_time(now)
+    print("✅ Recovery backfill finished")
 
 @bot.event
 async def on_message(message):
