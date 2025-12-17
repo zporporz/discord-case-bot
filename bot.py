@@ -332,6 +332,22 @@ async def random_react_dashboard(msg, count=5):
 
     except Exception as e:
         print("⚠️ reaction error:", e)
+def seconds_until_next_quarter():
+    now = now_th()
+    minute = now.minute
+    second = now.second
+
+    next_quarter = ((minute // 15) + 1) * 15
+    if next_quarter == 60:
+        next_time = now.replace(
+            minute=0, second=0, microsecond=0
+        ) + timedelta(hours=1)
+    else:
+        next_time = now.replace(
+            minute=next_quarter, second=0, microsecond=0
+        )
+
+    return (next_time - now).total_seconds()
 
 # ======================
 # UTILS
@@ -561,27 +577,21 @@ async def dashboard_updater():
     await bot.wait_until_ready()
     channel = bot.get_channel(DASHBOARD_CHANNEL_ID)
 
+    # 🔹 รอให้ชนรอบ 15 นาทีแรกก่อน
+    wait_sec = seconds_until_next_quarter()
+    print(f"⏳ Dashboard first sync in {int(wait_sec)}s")
+    await asyncio.sleep(wait_sec)
+
     while not bot.is_closed():
         embed = build_dashboard_embed()
         msg_id = get_dashboard_message_id()
 
         try:
             if msg_id:
-                try:
-                    # 🔍 พยายามดึง message เดิม
-                    msg = await channel.fetch_message(msg_id)
-                except discord.NotFound:
-                    # ❌ message ถูกลบ แต่ DB ยังจำอยู่
-                    print("⚠️ Dashboard message not found, recreating")
-                    msg = await channel.send(embed=embed)
-                    await msg.pin()
-                    set_dashboard_message_id(msg.id)
-
+                msg = await channel.fetch_message(msg_id)
                 await msg.edit(embed=embed)
                 await random_react_dashboard(msg, count=3)
-
             else:
-                # 🆕 ยังไม่เคยมี dashboard
                 msg = await channel.send(embed=embed)
                 await msg.pin()
                 await random_react_dashboard(msg, count=3)
@@ -590,7 +600,9 @@ async def dashboard_updater():
         except Exception as e:
             print("❌ Dashboard update error:", e)
 
+        # 🔹 จากนี้ล็อกที่ทุก 15 นาทีเป๊ะ
         await asyncio.sleep(15 * 60)
+
 
 # ======================
 # DISCORD SETUP
