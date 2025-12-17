@@ -3,6 +3,7 @@ from audit.audit_helpers import find_duplicate_person_in_message
 from audit.audit_export import export_audit_csv, export_audit_xlsx
 from datetime import datetime
 import discord
+import os
 
 
 def setup_audit_commands(bot, get_conn, is_pbt):
@@ -117,6 +118,15 @@ def setup_audit_commands(bot, get_conn, is_pbt):
                 ),
                 files=files
             )
+
+            # ===== cleanup temp files (xlsx only) =====
+            for f in files:
+                try:
+                    if f.filename.endswith(".xlsx"):
+                        os.remove(f.fp)
+                except Exception as e:
+                    print("⚠️ temp file cleanup failed:", e)
+
             return
 
         # =====================
