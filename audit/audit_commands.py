@@ -123,7 +123,7 @@ def setup_audit_commands(bot, get_conn, is_pbt):
             for f in files:
                 try:
                     if f.filename.endswith(".xlsx"):
-                        os.remove(f.fp)
+                        os.remove(f.fp.name)
                 except Exception as e:
                     print("⚠️ temp file cleanup failed:", e)
 
