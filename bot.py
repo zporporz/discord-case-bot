@@ -22,8 +22,10 @@ DASHBOARD_CHANNEL_ID = 1450794312026685573
 DASHBOARD_REACTIONS = [
     "📊", "🚨", "👮", "✅", "🔄",
     "📈", "🕒", "🛡️", "⚡", "📌",
-    "🔥", "💥", "📣", "🧠", "👀"
+    "🔥", "💥", "📣", "🧠", "👀",
+    "🏆", "🥇", "🥈", "🥉", "🎖️"
 ]
+
 
 # ======================
 # ENV / CONSTANTS
@@ -604,6 +606,132 @@ async def dashboard_updater():
         # 🔹 จากนี้ล็อกที่ทุก 15 นาทีเป๊ะ
         await asyncio.sleep(15 * 60)
 
+def get_top_officers_week(limit=5):
+    start, end = get_week_range_sun_sat()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    name,
+                    SUM(cases) AS total_cases,
+                    COUNT(DISTINCT message_id) AS total_posts
+                FROM cases
+                WHERE date BETWEEN %s AND %s
+                  AND is_deleted = FALSE
+                GROUP BY name
+                ORDER BY total_cases DESC
+                LIMIT %s
+            """, (start, end, limit))
+            return cur.fetchall(), start, end
+
+def build_weekly_ranking_embed():
+    rows, start, end = get_top_officers_week()
+
+    embed = Embed(
+        title="🥇 Officer Ranking — This Week",
+        description=(
+            f"📆 {start.strftime('%d/%m')} → {end.strftime('%d/%m')}\n"
+            f"⏱️ อัพเดทล่าสุด: {now_th().strftime('%H:%M')}"
+        ),
+        color=0xf1c40f
+    )
+
+    if not rows:
+        embed.description += "\n\n📭 ยังไม่มีข้อมูลในสัปดาห์นี้"
+        embed.set_footer(text=SYSTEM_FOOTER)
+        return embed
+
+    medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
+
+    lines = []
+    for i, (name, cases, posts) in enumerate(rows):
+        medal = medals[i] if i < len(medals) else "👮"
+        lines.append(
+            f"{medal} {name} — **{cases} เคส** ({posts} คดี)"
+        )
+
+    embed.add_field(
+        name="🏆 Top Officers",
+        value="\n".join(lines),
+        inline=False
+    )
+
+    embed.set_footer(
+        text=(
+            "📊 Weekly ranking (Sun–Sat)\n"
+                "⏰ Updated every Saturday at 23:59\n"
+        "Created by Lion Kuryru"
+        )
+    )
+    return embed
+
+def get_weekly_ranking_message_id():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT value FROM bot_meta
+                WHERE key = 'weekly_ranking_message_id'
+            """)
+            row = cur.fetchone()
+            return int(row[0]) if row else None
+
+
+def set_weekly_ranking_message_id(msg_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO bot_meta (key, value)
+                VALUES ('weekly_ranking_message_id', %s)
+                ON CONFLICT (key)
+                DO UPDATE SET value = EXCLUDED.value
+            """, (str(msg_id),))
+
+def seconds_until_saturday_2359():
+    now = now_th()
+
+    # weekday(): Mon=0 ... Sun=6 → Saturday = 5
+    days_until_sat = (5 - now.weekday()) % 7
+
+    target = (now + timedelta(days=days_until_sat)).replace(
+        hour=23, minute=59, second=0, microsecond=0
+    )
+
+    # ถ้าเลยเวลาเสาร์ 23:59 ของสัปดาห์นี้แล้ว → ขยับไปสัปดาห์หน้า
+    if target <= now:
+        target += timedelta(days=7)
+
+    return (target - now).total_seconds()
+    
+async def weekly_ranking_updater():
+    await bot.wait_until_ready()
+    channel = bot.get_channel(DASHBOARD_CHANNEL_ID)
+
+    while not bot.is_closed():
+        wait_sec = seconds_until_saturday_2359()
+        print(f"⏳ Weekly ranking update in {int(wait_sec)}s")
+        await asyncio.sleep(wait_sec)
+
+        embed = build_weekly_ranking_embed()
+        msg_id = get_weekly_ranking_message_id()
+
+        try:
+            if msg_id:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed)
+                await random_react_dashboard(msg, count=10)
+            else:
+                msg = await channel.send(embed=embed)
+                await msg.pin()
+                await random_react_dashboard(msg, count=10)
+                set_weekly_ranking_message_id(msg.id)
+
+        except Exception as e:
+            print("❌ Weekly ranking update error:", e)
+
+        # กันยิงซ้ำในนาทีเดียว
+        await asyncio.sleep(60)
+
 
 # ======================
 # DISCORD SETUP
@@ -681,6 +809,8 @@ async def on_ready():
     asyncio.create_task(daily_today_report())
     
     asyncio.create_task(dashboard_updater()) 
+    
+    asyncio.create_task(weekly_ranking_updater())
 
 
 def get_last_checked_time():
@@ -1435,6 +1565,10 @@ async def posts(ctx):
 
     await ctx.send(embed=embed)
 
+@bot.command()
+async def rankweek(ctx):
+    embed = build_weekly_ranking_embed()
+    await ctx.send(embed=embed)
 
 #@bot.command()
 #async def audit(ctx, limit: int = 10):

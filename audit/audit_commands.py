@@ -71,6 +71,7 @@ def setup_audit_commands(bot, get_conn, is_pbt):
                 return
 
             files = []
+            temp_paths = []   # 👈 เพิ่ม
             count = None
 
             # ===== CSV =====
@@ -96,7 +97,6 @@ def setup_audit_commands(bot, get_conn, is_pbt):
                     get_conn, start_date, end_date
                 )
 
-                # ถ้ายังไม่มี count (กรณี export excel อย่างเดียว)
                 if count is None:
                     count = excel_count
 
@@ -111,6 +111,8 @@ def setup_audit_commands(bot, get_conn, is_pbt):
                     )
                 )
 
+                temp_paths.append(xlsx_path)   # 👈 สำคัญ
+
             await ctx.send(
                 content=(
                     f"🧾 Audit log {count} รายการ\n"
@@ -120,13 +122,11 @@ def setup_audit_commands(bot, get_conn, is_pbt):
             )
 
             # ===== cleanup temp files (xlsx only) =====
-            for f in files:
+            for path in temp_paths:
                 try:
-                    if f.filename.endswith(".xlsx"):
-                        os.remove(f.fp.name)
+                    os.remove(path)
                 except Exception as e:
                     print("⚠️ temp file cleanup failed:", e)
-
             return
 
         # =====================
