@@ -351,6 +351,27 @@ def seconds_until_next_quarter():
 
     return (next_time - now).total_seconds()
 
+def parse_date_smart(date_str: str):
+    parts = date_str.split("/")
+
+    now = now_th()
+
+    if len(parts) == 3:
+        d, m, y = map(int, parts)
+    elif len(parts) == 2:
+        d, m = map(int, parts)
+        y = now.year
+    else:
+        raise ValueError("invalid date format")
+
+    target = datetime(y, m, d, tzinfo=TH_TZ).date()
+
+    # ถ้าไม่มีปี และวันที่อยู่ในอนาคต → ถอยปี
+    if len(parts) == 2 and target > now.date():
+        target = datetime(y - 1, m, d, tzinfo=TH_TZ).date()
+
+    return target
+
 # ======================
 # UTILS
 # ======================
@@ -1200,11 +1221,9 @@ async def me(ctx):
 @bot.command()
 async def date(ctx, date_str: str):
     try:
-        d, m = map(int, date_str.split("/"))
-        y = now_th().year
-        target = datetime(y, m, d, tzinfo=TH_TZ).date()
+        target = parse_date_smart(date_str)
     except:
-        await ctx.send("❌ ใช้ `!date DD/MM`")
+        await ctx.send("❌ ใช้ `!date DD/MM` หรือ `!date DD/MM/YYYY`")
         return
 
     with get_conn() as conn:
@@ -1426,11 +1445,9 @@ async def check(ctx, *, keyword: str = None):
 @bot.command()
 async def checkdate(ctx, date_str: str, *, keyword: str):
     try:
-        d, m = map(int, date_str.split("/"))
-        y = now_th().year
-        target = datetime(y, m, d, tzinfo=TH_TZ).date()
+        target = parse_date_smart(date_str)
     except:
-        await ctx.send("❌ ใช้ `!checkdate DD/MM ชื่อ`")
+        await ctx.send("❌ ใช้ `!checkdate DD/MM ชื่อ` หรือ `!checkdate DD/MM/YYYY ชื่อ`")
         return
 
     with get_conn() as conn:
