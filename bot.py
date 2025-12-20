@@ -1719,7 +1719,7 @@ async def rebuilddate(ctx, date_str: str):
     try:
         d, m, y = map(int, date_str.split("/"))
         start = datetime(y, m, d, 0, 0, 0, tzinfo=TH_TZ)
-        end = datetime(y, m, d, 23, 59, 59, tzinfo=TH_TZ)
+        end = start + timedelta(days=1)
     except:
         await ctx.send("❌ ใช้ `!rebuilddate DD/MM/YYYY`")
         return
@@ -1746,7 +1746,21 @@ async def rebuilddate(ctx, date_str: str):
             if not msg.mentions:
                 continue
 
-            process_case_message(msg)
+            tasks = []
+
+            for member in set(msg.mentions):
+                tasks.append(
+                    save_case_async(
+                        member.display_name,
+                        msg.channel.name,
+                        "case10" if msg.channel.id == CASE10_CHANNEL_ID else "normal",
+                        2 if msg.channel.id == CASE10_CHANNEL_ID else 1,
+                        msg.id,
+                        msg.created_at.astimezone(TH_TZ).date()
+                    )
+                )
+
+            await asyncio.gather(*tasks)
             rebuilt += 1
 
     write_audit(
