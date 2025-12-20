@@ -1693,6 +1693,52 @@ async def cmd(ctx):
     embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
 
+@bot.command()
+@is_pbt()
+async def rebuilddate(ctx, date_str: str):
+    try:
+        d, m, y = map(int, date_str.split("/"))
+        start = datetime(y, m, d, 0, 0, 0, tzinfo=TH_TZ)
+        end = datetime(y, m, d, 23, 59, 59, tzinfo=TH_TZ)
+    except:
+        await ctx.send("❌ ใช้ `!rebuilddate DD/MM/YYYY`")
+        return
+
+    await ctx.send(
+        f"🔄 เริ่ม rebuild วันที่ {date_str}\n"
+        "⛔ กรุณางดลงคดีระหว่างกระบวนการนี้"
+    )
+
+    rebuilt = 0
+
+    for channel_id in [CASE10_CHANNEL_ID, *NORMAL_CHANNEL_IDS]:
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            continue
+
+        async for msg in channel.history(
+            after=start,
+            before=end,
+            limit=None
+        ):
+            if msg.author.bot:
+                continue
+            if not msg.mentions:
+                continue
+
+            process_case_message(msg)
+            rebuilt += 1
+
+    write_audit(
+        action="REBUILD_DATE",
+        actor=ctx.author.display_name,
+        detail=date_str
+    )
+
+    await ctx.send(
+        f"✅ rebuild เสร็จแล้ว\n"
+        f"📊 ประมวลผล {rebuilt} โพส"
+    )
 
 # ======================
 # RESET DB
