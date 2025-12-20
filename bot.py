@@ -78,7 +78,13 @@ def save_case_pg(
                         (date, name, channel, case_type, cases, message_id)
                     VALUES
                         (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (message_id, name) DO NOTHING
+                    ON CONFLICT (message_id, name)
+                    DO UPDATE SET
+                        is_deleted = FALSE,
+                        cases = EXCLUDED.cases,
+                        case_type = EXCLUDED.case_type,
+                        channel = EXCLUDED.channel,
+                        date = EXCLUDED.date;
                 """, (
                     message_date,
                     name,
