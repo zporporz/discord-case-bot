@@ -12,6 +12,7 @@ from discord import Embed
 from datetime import timezone
 import asyncio
 SYSTEM_FOOTER = "Created by Lion Kuryu • Police Case Management System"
+EMERGENCY_REBUILD_ENABLED = False
 
 ALLOWED_COMMAND_CHANNELS = {
     1449425399397482789,  # ห้องคำสั่งหลัก
@@ -1719,9 +1720,19 @@ async def cmd(ctx):
     embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
 
+# ⚠️ EMERGENCY COMMAND
+# ใช้เฉพาะกรณีข้อมูลพัง / rebuild ย้อนหลัง
+# ห้ามใช้ปกติ
 @bot.command()
 @is_pbt()
 async def rebuilddate(ctx, date_str: str):
+
+    if not EMERGENCY_REBUILD_ENABLED:
+        await ctx.send(
+            "🔒 คำสั่งนี้ถูกปิดตามนโยบายระบบ\n"
+            "ใช้เฉพาะกรณีฉุกเฉินเท่านั้น"
+        )
+        return
     try:
         d, m, y = map(int, date_str.split("/"))
         start = datetime(y, m, d, 0, 0, 0, tzinfo=TH_TZ)
