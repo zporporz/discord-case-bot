@@ -1,0 +1,15 @@
+{
+  "extends": ["config:base"],
+  "timezone": "Asia/Bangkok",
+
+  "schedule": ["every weekend"],
+
+  "dependencyDashboard": true,
+
+  "prConcurrentLimit": 2,
+  "prHourlyLimit": 1,
+
+  "labels": ["renovate", "dependencies"],
+
+  "rangeStrategy": "replace"
+}
