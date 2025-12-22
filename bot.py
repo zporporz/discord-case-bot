@@ -608,12 +608,12 @@ async def dashboard_updater():
     await bot.wait_until_ready()
     channel = bot.get_channel(DASHBOARD_CHANNEL_ID)
 
-    # 🔹 รอให้ชนรอบ 15 นาทีแรกก่อน
-    wait_sec = seconds_until_next_quarter()
-    print(f"⏳ Dashboard first sync in {int(wait_sec)}s")
-    await asyncio.sleep(wait_sec)
-
     while not bot.is_closed():
+        # 🔹 รอให้ชนรอบ 15 นาทีทุกครั้ง
+        wait_sec = seconds_until_next_quarter()
+        print(f"⏳ Dashboard sync in {int(wait_sec)}s")
+        await asyncio.sleep(wait_sec)
+
         embed = build_dashboard_embed()
         msg_id = get_dashboard_message_id()
 
@@ -630,9 +630,6 @@ async def dashboard_updater():
 
         except Exception as e:
             print("❌ Dashboard update error:", e)
-
-        # 🔹 จากนี้ล็อกที่ทุก 15 นาทีเป๊ะ
-        await asyncio.sleep(15 * 60)
 
 def get_top_officers_week(limit=5):
     start, end = get_week_range_sun_sat()
@@ -660,7 +657,7 @@ def build_weekly_ranking_embed():
         title="🥇 Officer Ranking — This Week",
         description=(
             f"📆 {start.strftime('%d/%m')} → {end.strftime('%d/%m')}\n"
-            f"⏱️ อัพเดทล่าสุด: {now_th().strftime('%H:%M')}"
+            "⏱️ Updated every Saturday at 23:59"
         ),
         color=0xf1c40f
     )
@@ -671,8 +668,8 @@ def build_weekly_ranking_embed():
         return embed
 
     medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
-
     lines = []
+
     for i, (name, cases, posts) in enumerate(rows):
         medal = medals[i] if i < len(medals) else "👮"
         lines.append(
@@ -688,11 +685,12 @@ def build_weekly_ranking_embed():
     embed.set_footer(
         text=(
             "📊 Weekly ranking (Sun–Sat)\n"
-                "⏰ Updated every Saturday at 23:59\n"
-        "Created by Lion Kuryru"
+            "⏰ Updated every Saturday at 23:59\n"
+            "Created by Lion Kuryru"
         )
     )
     return embed
+
 
 def get_weekly_ranking_message_id():
     with get_conn() as conn:
