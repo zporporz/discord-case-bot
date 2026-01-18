@@ -1606,6 +1606,60 @@ async def posts(ctx):
 async def rankweek(ctx):
     embed = build_weekly_ranking_embed()
     await ctx.send(embed=embed)
+    
+@bot.command()
+async def checkuphill(ctx, *, keyword: str = None):
+    today = today_th()
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if keyword:
+                cur.execute("""
+                    SELECT name, COUNT(*) AS total
+                    FROM cases
+                    WHERE date = %s
+                      AND is_uphill = TRUE
+                      AND is_deleted = FALSE
+                      AND name ILIKE %s
+                    GROUP BY name
+                    ORDER BY total DESC
+                """, (today, f"%{keyword}%"))
+            else:
+                cur.execute("""
+                    SELECT name, COUNT(*) AS total
+                    FROM cases
+                    WHERE date = %s
+                      AND is_uphill = TRUE
+                      AND is_deleted = FALSE
+                    GROUP BY name
+                    ORDER BY total DESC
+                """, (today,))
+
+            rows = cur.fetchall()
+
+    if not rows:
+        await ctx.send("📭 วันนี้ยังไม่มีเคส (ขึ้นเขา)")
+        return
+
+    embed = Embed(
+        title="🏔️ สรุปเคสขึ้นเขา (วันนี้)",
+        description=(
+            f"📅 วันที่: {today.strftime('%d/%m/%Y')}\n"
+            + (f"🔍 ค้นหา: {keyword}" if keyword else "")
+        ),
+        color=0x8e44ad
+    )
+
+    for name, total in rows:
+        embed.add_field(
+            name=f"👤 {name}",
+            value=f"🏔️ {total} ครั้ง",
+            inline=False
+        )
+
+    embed.set_footer(text=SYSTEM_FOOTER)
+    await ctx.send(embed=embed)
+
 
 #@bot.command()
 #async def audit(ctx, limit: int = 10):
