@@ -1609,11 +1609,22 @@ async def rankweek(ctx):
     
 @bot.command()
 async def checkuphill(ctx, *, keyword: str = None):
-    today = today_th()
+    # ค่า default = วันนี้
+    target_date = today_th()
+    search_name = None
+
+    # ถ้ามี argument
+    if keyword:
+        # ลอง parse เป็นวันที่ก่อน
+        try:
+            target_date = parse_date_smart(keyword)
+        except:
+            # ถ้าไม่ใช่วันที่ → ถือว่าเป็นชื่อ
+            search_name = keyword
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            if keyword:
+            if search_name:
                 cur.execute("""
                     SELECT name, COUNT(*) AS total
                     FROM cases
@@ -1623,7 +1634,7 @@ async def checkuphill(ctx, *, keyword: str = None):
                       AND name ILIKE %s
                     GROUP BY name
                     ORDER BY total DESC
-                """, (today, f"%{keyword}%"))
+                """, (target_date, f"%{search_name}%"))
             else:
                 cur.execute("""
                     SELECT name, COUNT(*) AS total
@@ -1633,19 +1644,21 @@ async def checkuphill(ctx, *, keyword: str = None):
                       AND is_deleted = FALSE
                     GROUP BY name
                     ORDER BY total DESC
-                """, (today,))
+                """, (target_date,))
 
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send("📭 วันนี้ยังไม่มีเคส (ขึ้นเขา)")
+        await ctx.send(
+            f"📭 ไม่พบเคส (ขึ้นเขา) วันที่ {target_date.strftime('%d/%m/%Y')}"
+        )
         return
 
     embed = Embed(
-        title="🏔️ สรุปเคสขึ้นเขา (วันนี้)",
+        title="🏔️ Uphill Case Summary",
         description=(
-            f"📅 วันที่: {today.strftime('%d/%m/%Y')}\n"
-            + (f"🔍 ค้นหา: {keyword}" if keyword else "")
+            f"📅 วันที่: {target_date.strftime('%d/%m/%Y')}\n"
+            + (f"👤 ค้นหา: {search_name}" if search_name else "👥 ทุกเจ้าหน้าที่")
         ),
         color=0x8e44ad
     )
@@ -1659,7 +1672,6 @@ async def checkuphill(ctx, *, keyword: str = None):
 
     embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
-
 
 #@bot.command()
 #async def audit(ctx, limit: int = 10):
@@ -1755,8 +1767,18 @@ async def cmd(ctx):
         name="🛠️ เครื่องมือ",
         value=(
             "`!time` — ⏰ ตรวจเวลาของบอท (TH / UTC+7)\n"
-             "`!checkuphill [ชื่อ]` — 🏔️ เช็คเคสขึ้นเขา (วันนี้)\n"
             "`!cmd` — 📖 ดูคำสั่งทั้งหมด"
+        ),
+        inline=False
+    )
+    # ===== คำสั่งคดีขึ้นเขา =====
+    embed.add_field(
+        name="🏔️ คำสั่งคดีขึ้นเขา",
+        value=(
+            "`!checkuphill` — ดูคดีขึ้นเขาวันนี้ทั้งหมด\n"
+            "`!checkuphill ชื่อ` — ดูคดีขึ้นเขาวันนี้ (เฉพาะบุคคล)\n"
+           "`!checkuphill DD/MM` — ดูคดีขึ้นเขาตามวันที่\n"
+           "`!checkuphill DD/MM ชื่อ` — ดูคดีขึ้นเขาตามวันที่ (เฉพาะบุคคล)"
         ),
         inline=False
     )
