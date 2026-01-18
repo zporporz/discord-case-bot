@@ -69,30 +69,34 @@ def save_case_pg(
     case_type: str,
     cases: int,
     message_id: int,
-    message_date
+    message_date,
+    is_uphill: bool = False
 ):
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO cases
-                        (date, name, channel, case_type, cases, message_id)
+                     (date, name, channel, case_type, cases, message_id, is_uphill)
                     VALUES
-                        (%s, %s, %s, %s, %s, %s)
+                     (%s, %s, %s, %s, %s, %s, %s)
+
                     ON CONFLICT (message_id, name)
                     DO UPDATE SET
                         is_deleted = FALSE,
                         cases = EXCLUDED.cases,
                         case_type = EXCLUDED.case_type,
                         channel = EXCLUDED.channel,
-                        date = EXCLUDED.date;
+                        date = EXCLUDED.date,
+                        is_uphill = EXCLUDED.is_uphill;
                 """, (
                     message_date,
                     name,
                     channel,
                     case_type,
                     cases,
-                    str(message_id)
+                    str(message_id),
+                    is_uphill
                 ))
         print(
             f"✅ Saved | {name} | {case_type} | +{cases} | "
@@ -107,7 +111,8 @@ async def save_case_async(
     case_type: str,
     cases: int,
     message_id: int,
-    message_date
+    message_date,
+    is_uphill: bool = False
 ):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
@@ -118,7 +123,8 @@ async def save_case_async(
         case_type,
         cases,
         message_id,
-        message_date
+        message_date,
+        is_uphill
     )
 
 def is_message_saved(message_id: int) -> bool:
@@ -382,6 +388,9 @@ def parse_date_smart(date_str: str):
 # ======================
 # UTILS
 # ======================
+def is_uphill_case(message_content: str) -> bool:
+    return "(ขึ้นเขา)" in message_content
+
 def normalize_name(name: str):
     name = re.sub(r"\+?\d+\s*", "", name)
     name = re.sub(r"\[.*?\]\s*", "", name)
@@ -406,6 +415,7 @@ def process_case_message(message):
         return
 
     message_date = message.created_at.astimezone(TH_TZ).date()
+    uphill = is_uphill_case(message.content)
     unique_members = set(message.mentions)
 
     for member in unique_members:
@@ -416,7 +426,8 @@ def process_case_message(message):
                 case_type,
                 case_value,
                 message.id,
-                message_date
+                message_date,
+                uphill
             )
         )
 
@@ -994,6 +1005,7 @@ async def on_message(message):
         return
 
     message_date = message.created_at.astimezone(TH_TZ).date()
+    uphill = is_uphill_case(message.content)
 
     mentions = message.mentions
     unique_members = set(mentions)
@@ -1013,7 +1025,8 @@ async def on_message(message):
                 case_type,
                 case_value,
                 message.id,
-                message_date
+                message_date,
+                uphill
             )
         )
 
@@ -1128,6 +1141,7 @@ async def on_message_edit(before, after):
         return
 
     message_date = after.created_at.astimezone(TH_TZ).date()
+    uphill = is_uphill_case(after.content)
     unique_members = set(after.mentions)
 
     for member in unique_members:
@@ -1138,7 +1152,8 @@ async def on_message_edit(before, after):
                 case_type,
                 case_value,
                 after.id,
-                message_date
+                message_date,
+                uphill
             )
         )
 
@@ -1764,6 +1779,7 @@ async def rebuilddate(ctx, date_str: str):
             tasks = []
 
             for member in set(msg.mentions):
+                uphill = is_uphill_case(msg.content)
                 tasks.append(
                     save_case_async(
                         member.display_name,
@@ -1771,7 +1787,8 @@ async def rebuilddate(ctx, date_str: str):
                         "case10" if msg.channel.id == CASE10_CHANNEL_ID else "normal",
                         2 if msg.channel.id == CASE10_CHANNEL_ID else 1,
                         msg.id,
-                        msg.created_at.astimezone(TH_TZ).date()
+                        msg.created_at.astimezone(TH_TZ).date(),
+                        uphill
                     )
                 )
 
