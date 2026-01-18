@@ -1608,49 +1608,65 @@ async def rankweek(ctx):
     await ctx.send(embed=embed)
     
 @bot.command()
-async def checkuphill(ctx, *, keyword: str = None):
-    # ค่า default = วันนี้
+async def checkuphill(ctx, *, args: str = None):
     target_date = today_th()
     search_name = None
 
-    # ถ้ามี argument
-    if keyword:
-        # ลอง parse เป็นวันที่ก่อน
-        try:
-            target_date = parse_date_smart(keyword)
-        except:
-            # ถ้าไม่ใช่วันที่ → ถือว่าเป็นชื่อ
-            search_name = keyword
+    if args:
+        parts = args.split()
+
+        # กรณีมีมากกว่า 1 token → ลองแยกวัน + ชื่อ
+        if len(parts) >= 2:
+            try:
+                target_date = parse_date_smart(parts[0])
+                search_name = " ".join(parts[1:])
+            except:
+                search_name = args
+        else:
+            # มี token เดียว → ลองเป็นวันที่ก่อน ถ้าไม่ได้ถือเป็นชื่อ
+            try:
+                target_date = parse_date_smart(parts[0])
+            except:
+                search_name = parts[0]
 
     with get_conn() as conn:
         with conn.cursor() as cur:
             if search_name:
                 cur.execute("""
-                    SELECT name, COUNT(*) AS total
+                    SELECT
+                        name,
+                        COUNT(DISTINCT message_id) AS posts,
+                        SUM(cases) AS total_cases
                     FROM cases
                     WHERE date = %s
                       AND is_uphill = TRUE
                       AND is_deleted = FALSE
                       AND name ILIKE %s
                     GROUP BY name
-                    ORDER BY total DESC
+                    ORDER BY total_cases DESC
                 """, (target_date, f"%{search_name}%"))
             else:
                 cur.execute("""
-                    SELECT name, COUNT(*) AS total
+                    SELECT
+                        name,
+                        COUNT(DISTINCT message_id) AS posts,
+                        SUM(cases) AS total_cases
                     FROM cases
                     WHERE date = %s
                       AND is_uphill = TRUE
                       AND is_deleted = FALSE
                     GROUP BY name
-                    ORDER BY total DESC
+                    ORDER BY total_cases DESC
                 """, (target_date,))
 
             rows = cur.fetchall()
 
     if not rows:
         await ctx.send(
-            f"📭 ไม่พบเคส (ขึ้นเขา) วันที่ {target_date.strftime('%d/%m/%Y')}"
+            embed=Embed(
+                description=f"📭 ไม่พบเคสขึ้นเขา วันที่ {target_date.strftime('%d/%m/%Y')}",
+                color=0x2f3136
+            )
         )
         return
 
@@ -1660,13 +1676,13 @@ async def checkuphill(ctx, *, keyword: str = None):
             f"📅 วันที่: {target_date.strftime('%d/%m/%Y')}\n"
             + (f"👤 ค้นหา: {search_name}" if search_name else "👥 ทุกเจ้าหน้าที่")
         ),
-        color=0x8e44ad
+        color=0xe67e22
     )
 
-    for name, total in rows:
+    for name, posts, total in rows:
         embed.add_field(
             name=f"👤 {name}",
-            value=f"🏔️ {total} ครั้ง",
+            value=f"🏔️ {total} เคส ({posts} คดี)",
             inline=False
         )
 
@@ -1771,16 +1787,16 @@ async def cmd(ctx):
         ),
         inline=False
     )
-    # ===== คำสั่งคดีขึ้นเขา =====
+# ===== คำสั่งคดีขึ้นเขา =====
     embed.add_field(
         name="🏔️ คำสั่งคดีขึ้นเขา",
         value=(
-            "`!checkuphill` — ดูคดีขึ้นเขาวันนี้ทั้งหมด\n"
-            "`!checkuphill ชื่อ` — ดูคดีขึ้นเขาวันนี้ (เฉพาะบุคคล)\n"
+           "`!checkuphill` — ดูคดีขึ้นเขาวันนี้ทั้งหมด\n"
+           "`!checkuphill ชื่อ` — ดูคดีขึ้นเขาวันนี้ (เฉพาะบุคคล)\n"
            "`!checkuphill DD/MM` — ดูคดีขึ้นเขาตามวันที่\n"
-           "`!checkuphill DD/MM ชื่อ` — ดูคดีขึ้นเขาตามวันที่ (เฉพาะบุคคล)"
-        ),
-        inline=False
+           "`!checkuphill DD/MM[/YYYY] ชื่อ` — ดูคดีขึ้นเขาตามวันที่ (เฉพาะบุคคล)"
+     ),
+     inline=False
     )
 
     # ===== Audit / Admin =====
