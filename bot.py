@@ -1755,6 +1755,7 @@ async def cmd(ctx):
         name="🛠️ เครื่องมือ",
         value=(
             "`!time` — ⏰ ตรวจเวลาของบอท (TH / UTC+7)\n"
+             "`!checkuphill [ชื่อ]` — 🏔️ เช็คเคสขึ้นเขา (วันนี้)\n"
             "`!cmd` — 📖 ดูคำสั่งทั้งหมด"
         ),
         inline=False
