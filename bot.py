@@ -1643,7 +1643,6 @@ async def checkuphill(ctx, *, args: str = None):
                       AND is_deleted = FALSE
                       AND name ILIKE %s
                     GROUP BY name
-                    ORDER BY total_cases DESC
                 """, (target_date, f"%{search_name}%"))
             else:
                 cur.execute("""
@@ -1656,7 +1655,6 @@ async def checkuphill(ctx, *, args: str = None):
                       AND is_uphill = TRUE
                       AND is_deleted = FALSE
                     GROUP BY name
-                    ORDER BY total_cases DESC
                 """, (target_date,))
 
             rows = cur.fetchall()
@@ -1679,7 +1677,11 @@ async def checkuphill(ctx, *, args: str = None):
         color=0xe67e22
     )
 
-    for name, posts, total in rows:
+    # ✅ เรียง A–Z ตามชื่อ (ไม่สนเลขหน้า)
+    for name, posts, total in sorted(
+        rows,
+        key=lambda x: normalize_name(x[0])
+    ):
         embed.add_field(
             name=f"👤 {name}",
             value=f"🏔️ {total} เคส ({posts} คดี)",
