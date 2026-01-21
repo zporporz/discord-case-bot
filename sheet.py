@@ -83,6 +83,17 @@ def find_day_column(day: int):
     raise ValueError(f"ไม่พบ column ของวันที่ {day}")
 
 
+def build_name_row_map(sheet):
+    names = sheet.col_values(NAME_COLUMN)  # READ ครั้งเดียว
+    mapping = {}
+
+    for idx, cell in enumerate(names, start=1):
+        norm = normalize_sheet_name(cell)
+        if norm:
+            mapping[norm] = idx
+
+    return mapping
+
 # ======================
 # PUBLIC API (เรียกจาก bot)
 # ======================

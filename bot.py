@@ -1731,10 +1731,11 @@ def run_daily_case_sync(target_date):
 
     sheet = get_sheet()
 
-    # ✅ READ แค่ครั้งเดียว
-    name_row_map = build_name_row_map(sheet)
+    # ✅ หา column ของวัน + ขยับไป case/day
     col = find_day_column(target_date.day)
     case_col = col + 1
+
+    name_row_map = build_name_row_map(sheet)
 
     updates = []
     written = 0
@@ -1745,12 +1746,16 @@ def run_daily_case_sync(target_date):
         if not row:
             skipped.append(norm_name)
             continue
+    updates.append({
+        "range": rowcol_to_a1(row, case_col),
+        "values": [[str(total_cases)]]
+    })
+    written += 1
 
-        updates.append({
-            "range": rowcol_to_a1(row, case_col),
-            "values": [[str(total_cases)]]
-        })
-        written += 1
+    if updates:
+        sheet.batch_update(updates)
+
+
 
     # ✅ WRITE ทีเดียว
     if updates:
