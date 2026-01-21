@@ -11,6 +11,8 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
+from sheet import write_daily_hours
+
 SYSTEM_FOOTER = "Created by Lion Kuryu • Police Case Management System"
 EMERGENCY_REBUILD_ENABLED = False
 
