@@ -11,7 +11,9 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
+from gspread.utils import rowcol_to_a1
 HEADER_ROW = 4
+NAME_COLUMN = 2   # คอลัมน์ชื่อเจ้าหน้าที่ (B)
 
 from sheet import (
     write_daily_hours,
@@ -1714,7 +1716,6 @@ def run_daily_case_sync(target_date):
                             'g'
                         )
                     ) AS norm_name,
-
                     SUM(cases)
                     + COUNT(*) FILTER (WHERE is_uphill = TRUE)
                     AS total_cases
@@ -1729,32 +1730,45 @@ def run_daily_case_sync(target_date):
         return 0, []
 
     sheet = get_sheet()
+
+    # ✅ READ แค่ครั้งเดียว
+    name_row_map = build_name_row_map(sheet)
+    col = find_day_column(target_date.day)
+    case_col = col + 1
+
+    updates = []
     written = 0
     skipped = []
 
     for norm_name, total_cases in rows:
-        try:
-            # ❗ ส่งชื่อที่ normalize แล้วเข้าไปได้เลย
-            row = find_row_by_name(norm_name)
-            if not row:
-                skipped.append(norm_name)
-                continue
-
-            col = find_day_column(target_date.day)
-            case_col = col + 1
-
-            sub_header = sheet.cell(HEADER_ROW + 1, case_col).value or ""
-            if "case" not in sub_header.lower():
-                raise RuntimeError("Not case/day column")
-
-            sheet.update_cell(row, case_col, str(total_cases))
-            written += 1
-
-        except Exception as e:
-            print("❌ Sheet write error:", norm_name, e)
+        row = name_row_map.get(norm_name)
+        if not row:
             skipped.append(norm_name)
+            continue
+
+        updates.append({
+            "range": rowcol_to_a1(row, case_col),
+            "values": [[str(total_cases)]]
+        })
+        written += 1
+
+    # ✅ WRITE ทีเดียว
+    if updates:
+        sheet.batch_update(updates)
 
     return written, skipped
+
+
+def build_name_row_map(sheet):
+    names = sheet.col_values(NAME_COLUMN)  # 🔴 READ ครั้งเดียว
+    mapping = {}
+
+    for idx, cell in enumerate(names, start=1):
+        norm = normalize_name(cell)
+        if norm:
+            mapping[norm] = idx
+
+    return mapping
 
 @bot.command()
 @is_pbt()
