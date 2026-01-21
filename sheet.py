@@ -47,17 +47,31 @@ def get_sheet():
     _sheet_cache = gc.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
     return _sheet_cache
 
+def normalize_sheet_name(name: str) -> str:
+    if not name:
+        return ""
+    # ลบ +001, 001, ตัวเลขนำหน้า
+    name = re.sub(r"^\+?\d+\s*", "", name)
+    # ลบ [GRPL], [xxx]
+    name = re.sub(r"\[.*?\]\s*", "", name)
+    # ลบช่องว่างซ้ำ
+    name = re.sub(r"\s+", " ", name)
+    return name.strip().lower()
 
 
 def find_row_by_name(name: str):
     sheet = get_sheet()
     names = sheet.col_values(NAME_COLUMN)
 
+    target = normalize_sheet_name(name)
+
     for idx, cell in enumerate(names, start=1):
-        if cell.strip().lower() == name.strip().lower():
+        if normalize_sheet_name(cell) == target:
             return idx
 
     return None
+
+
 
 def find_day_column(day: int):
     sheet = get_sheet()
