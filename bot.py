@@ -399,9 +399,22 @@ def is_uphill_case(message_content: str) -> bool:
     return "(ขึ้นเขา)" in message_content
 
 def normalize_name(name: str):
-    name = re.sub(r"\+?\d+\s*", "", name)
-    name = re.sub(r"\[.*?\]\s*", "", name)
-    return name.strip().lower()
+    if not name:
+        return ""
+
+    name = name.lower()
+
+    # ลบ +เลขหน้า
+    name = re.sub(r"\+?\d+", "", name)
+
+    # ลบ tag [xxx]
+    name = re.sub(r"\[.*?\]", "", name)
+
+    # เปลี่ยน whitespace ทุกชนิด → space เดียว
+    name = re.sub(r"\s+", " ", name)
+
+    return name.strip()
+
 
 
 def get_week_range_sun_sat():
@@ -1742,6 +1755,7 @@ def run_daily_case_sync(target_date):
     for norm_name, total_cases in rows:
         row = name_row_map.get(norm_name)
         if row is None:
+            print("SKIP:", repr(norm_name))
             skipped.append(norm_name)
             continue
 
