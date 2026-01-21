@@ -11,7 +11,13 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
-from sheet import write_daily_hours
+from sheet import (
+    write_daily_hours,
+    find_day_column,
+    find_row_by_name,
+    get_sheet
+)
+# ======================
 
 SYSTEM_FOOTER = "Created by Lion Kuryu • Police Case Management System"
 EMERGENCY_REBUILD_ENABLED = False
@@ -1691,6 +1697,92 @@ async def checkuphill(ctx, *, args: str = None):
         )
 
     embed.set_footer(text=SYSTEM_FOOTER)
+    await ctx.send(embed=embed)
+
+@bot.command()
+@is_pbt()
+async def testcase(ctx, date_str: str):
+    try:
+        target_date = parse_date_smart(date_str)
+    except:
+        await ctx.send("❌ ใช้ `!testcase DD/MM/YYYY`")
+        return
+
+    # ===== ดึงข้อมูลจาก DB =====
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    name,
+                    SUM(cases) FILTER (WHERE case_type = 'normal' AND is_uphill = FALSE) AS normal_cases,
+                    SUM(cases) FILTER (WHERE is_uphill = TRUE) AS uphill_cases,
+                    SUM(cases) FILTER (WHERE case_type = 'case10') AS point10_cases
+                FROM cases
+                WHERE date = %s
+                  AND is_deleted = FALSE
+                GROUP BY name
+            """, (target_date,))
+            rows = cur.fetchall()
+
+    if not rows:
+        await ctx.send("📭 วันนี้ไม่มีข้อมูล")
+        return
+
+    sheet = get_sheet()
+    written = 0
+    skipped = []
+
+    # ===== เขียนลง Google Sheet =====
+    for name, normal, uphill, point10 in rows:
+        normal = normal or 0
+        uphill = uphill or 0
+        point10 = point10 or 0
+
+        total_cases = normal + uphill + point10
+
+        try:
+            row = find_row_by_name(name)
+            if not row:
+                skipped.append(name)
+                continue
+
+            col = find_day_column(target_date.day)
+            cell = sheet.cell(row, col)
+
+            # รูปแบบข้อความในชีท
+            value = (
+                f"{total_cases}\n"
+                f"(ปกติ {normal} | ขึ้นเขา {uphill} | จุด10 {point10})"
+            )
+
+            sheet.update_cell(row, col, value)
+            written += 1
+
+        except Exception as e:
+            print("❌ Sheet write error:", name, e)
+            skipped.append(name)
+
+    # ===== ตอบ Discord =====
+    embed = Embed(
+        title="🧪 Testcase → Google Sheet",
+        description=f"📅 วันที่: {target_date.strftime('%d/%m/%Y')}",
+        color=0x2ecc71
+    )
+
+    embed.add_field(
+        name="✅ เขียนสำเร็จ",
+        value=f"{written} คน",
+        inline=False
+    )
+
+    if skipped:
+        embed.add_field(
+            name="⚠️ ไม่พบชื่อในชีท",
+            value="\n".join(skipped),
+            inline=False
+        )
+
+    embed.set_footer(text="TEST MODE — เขียนลงชีทจริง")
     await ctx.send(embed=embed)
 
 #@bot.command()

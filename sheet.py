@@ -1,6 +1,7 @@
 import gspread
 import os
 import json
+import re
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -63,9 +64,13 @@ def find_day_column(day: int):
     header = sheet.row_values(HEADER_ROW)
 
     for idx, cell in enumerate(header):
-        if cell and str(day) in cell:
-            # +1 เพราะ Google Sheet นับ column จาก 1
-            return idx + 1
+        if not cell:
+            continue
+
+        # ดึงเลขวันออกมาจาก cell
+        numbers = re.findall(r"\d+", str(cell))
+        if numbers and int(numbers[0]) == day:
+            return idx + 1  # Google Sheet column เริ่มที่ 1
 
     raise ValueError(f"ไม่พบ column ของวันที่ {day}")
 
