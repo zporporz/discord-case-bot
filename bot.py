@@ -17,6 +17,7 @@ from sheet import (
     find_row_by_name,
     get_sheet
 )
+import sheet
 # ======================
 
 SYSTEM_FOOTER = "Created by Lion Kuryu • Police Case Management System"
@@ -1750,12 +1751,10 @@ async def testcase(ctx, date_str: str):
             cell = sheet.cell(row, col)
 
             # รูปแบบข้อความในชีท
-            value = (
-                f"{total_cases}\n"
-                f"(ปกติ {normal} | ขึ้นเขา {uphill} | จุด10 {point10})"
-            )
+            value = str(total_cases)   # ✅ ตัวเลขล้วน
 
             sheet.update_cell(row, col, value)
+
             written += 1
 
         except Exception as e:
