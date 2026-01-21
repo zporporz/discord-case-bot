@@ -1708,12 +1708,12 @@ def run_testcase_sync(target_date):
             cur.execute("""
                 SELECT
                     name,
-                    SUM(cases) FILTER (WHERE case_type = 'normal' AND is_uphill = FALSE) AS normal_cases,
-                    SUM(cases) FILTER (WHERE is_uphill = TRUE) AS uphill_cases,
-                    SUM(cases) FILTER (WHERE case_type = 'case10') AS point10_cases
+                    SUM(cases)
+                    + COUNT(*) FILTER (WHERE is_uphill = TRUE)
+                    AS total_cases
                 FROM cases
                 WHERE date = %s
-                  AND is_deleted = FALSE
+                AND is_deleted = FALSE
                 GROUP BY name
             """, (target_date,))
             rows = cur.fetchall()
@@ -1725,11 +1725,7 @@ def run_testcase_sync(target_date):
     written = 0
     skipped = []
 
-    for name, normal, uphill, point10 in rows:
-        normal = normal or 0
-        uphill = uphill or 0
-        point10 = point10 or 0
-        total_cases = normal + uphill + point10
+    for name, total_cases in rows:
 
         try:
             row = find_row_by_name(name)
