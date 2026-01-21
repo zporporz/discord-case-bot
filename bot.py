@@ -34,6 +34,7 @@ DASHBOARD_REACTIONS = [
     "🏆", "🥇", "🥈", "🥉", "🎖️"
 ]
 
+SHEET_SYNC_REPORT_CHANNEL_ID = 1393544204960927764
 
 # ======================
 # ENV / CONSTANTS
@@ -851,6 +852,68 @@ async def daily_today_report():
                 print("✅ Daily report sent")
                 
         await asyncio.sleep(60)
+
+async def daily_sheet_auto_sync():
+    await bot.wait_until_ready()
+
+    channel = bot.get_channel(DAILY_REPORT_CHANNEL_ID)
+
+    while not bot.is_closed():
+        now = now_th()
+
+        target = now.replace(
+            hour=23, minute=59, second=0, microsecond=0
+        )
+
+        if now >= target:
+            target += timedelta(days=1)
+
+        sleep_seconds = (target - now).total_seconds()
+        print(f"⏳ Auto sheet sync in {int(sleep_seconds)}s")
+        await asyncio.sleep(sleep_seconds)
+
+        target_date = today_th()
+
+        try:
+            written, skipped = await asyncio.to_thread(
+                run_daily_case_sync,
+                target_date
+            )
+
+            print(
+                f"✅ Auto Sheet Sync {target_date} | "
+                f"written={written} skipped={len(skipped)}"
+            )
+
+            # 🔔 แจ้งผลใน Discord
+            if channel:
+                embed = Embed(
+                    title="📊 Auto Sheet Sync Completed",
+                    description=f"📅 วันที่: {target_date.strftime('%d/%m/%Y')}",
+                    color=0x2ecc71
+                )
+                embed.add_field(
+                    name="✅ เขียนสำเร็จ",
+                    value=f"{written} คน",
+                    inline=False
+                )
+
+                if skipped:
+                    embed.add_field(
+                        name="⚠️ ไม่พบชื่อในชีท",
+                        value="\n".join(skipped),
+                        inline=False
+                    )
+
+                embed.set_footer(text="⏰ Auto Sync เวลา 23:59")
+                await channel.send(embed=embed)
+
+        except Exception as e:
+            print("❌ Auto Sheet Sync error:", e)
+            if channel:
+                await channel.send(f"❌ Auto Sheet Sync Error: `{e}`")
+
+        await asyncio.sleep(60)
         
 @bot.event
 async def on_ready():
@@ -864,10 +927,11 @@ async def on_ready():
 
     # daily report เหมือนเดิม
     asyncio.create_task(daily_today_report())
-    
     asyncio.create_task(dashboard_updater()) 
     
     asyncio.create_task(weekly_ranking_updater())
+    # ✅ AUTO SYNC GOOGLE SHEET
+    asyncio.create_task(daily_sheet_auto_sync())
 
 
 def get_last_checked_time():
