@@ -1707,14 +1707,21 @@ def run_testcase_sync(target_date):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
-                    name,
+                    LOWER(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(name, '^\+?\d+\s*', ''),
+                            '\[.*?\]\s*', '',
+                            'g'
+                        )
+                    ) AS norm_name,
+
                     SUM(cases)
                     + COUNT(*) FILTER (WHERE is_uphill = TRUE)
                     AS total_cases
                 FROM cases
                 WHERE date = %s
-                AND is_deleted = FALSE
-                GROUP BY name
+                  AND is_deleted = FALSE
+                GROUP BY norm_name
             """, (target_date,))
             rows = cur.fetchall()
 
@@ -1725,12 +1732,12 @@ def run_testcase_sync(target_date):
     written = 0
     skipped = []
 
-    for name, total_cases in rows:
-
+    for norm_name, total_cases in rows:
         try:
-            row = find_row_by_name(name)
+            # ❗ ส่งชื่อที่ normalize แล้วเข้าไปได้เลย
+            row = find_row_by_name(norm_name)
             if not row:
-                skipped.append(name)
+                skipped.append(norm_name)
                 continue
 
             col = find_day_column(target_date.day)
@@ -1743,8 +1750,9 @@ def run_testcase_sync(target_date):
             sheet.update_cell(row, case_col, str(total_cases))
             written += 1
 
-        except Exception:
-            skipped.append(name)
+        except Exception as e:
+            print("❌ Sheet write error:", norm_name, e)
+            skipped.append(norm_name)
 
     return written, skipped
 
