@@ -1705,7 +1705,7 @@ async def checkuphill(ctx, *, args: str = None):
 def run_testcase_sync(target_date):
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(r"""
                 SELECT
                     LOWER(
                         REGEXP_REPLACE(
