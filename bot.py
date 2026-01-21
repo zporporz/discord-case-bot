@@ -1702,16 +1702,7 @@ async def checkuphill(ctx, *, args: str = None):
     embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
 
-@bot.command()
-@is_pbt()
-async def testcase(ctx, date_str: str):
-    try:
-        target_date = parse_date_smart(date_str)
-    except:
-        await ctx.send("❌ ใช้ `!testcase DD/MM/YYYY`")
-        return
-
-    # ===== ดึงข้อมูลจาก DB =====
+def run_testcase_sync(target_date):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -1728,19 +1719,16 @@ async def testcase(ctx, date_str: str):
             rows = cur.fetchall()
 
     if not rows:
-        await ctx.send("📭 วันนี้ไม่มีข้อมูล")
-        return
+        return 0, []
 
     sheet = get_sheet()
     written = 0
     skipped = []
 
-    # ===== เขียนลง Google Sheet =====
     for name, normal, uphill, point10 in rows:
         normal = normal or 0
         uphill = uphill or 0
         point10 = point10 or 0
-
         total_cases = normal + uphill + point10
 
         try:
@@ -1748,33 +1736,47 @@ async def testcase(ctx, date_str: str):
             if not row:
                 skipped.append(name)
                 continue
-            col = find_day_column(target_date.day)
-            case_col = col + 1   # 👉 ขยับไปฝั่ง case./day
 
-            # 🛡️ Safety check: ต้องเป็น case./day เท่านั้น
+            col = find_day_column(target_date.day)
+            case_col = col + 1
+
             sub_header = sheet.cell(HEADER_ROW + 1, case_col).value or ""
             if "case" not in sub_header.lower():
-                raise RuntimeError(
-                    f"Wrong column detected (row {HEADER_ROW + 1}, col {case_col}): {sub_header}"
-                )
+                raise RuntimeError("Not case/day column")
 
-            value = str(total_cases)   # ✅ ตัวเลขล้วน
-            sheet.update_cell(row, case_col, value)  # ✅ ใช้ case_col
-
+            sheet.update_cell(row, case_col, str(total_cases))
             written += 1
 
-        except Exception as e:
-            print("❌ Sheet write error:", name, e)
+        except Exception:
             skipped.append(name)
 
+    return written, skipped
 
-    # ===== ตอบ Discord =====
+@bot.command()
+@is_pbt()
+async def testcase(ctx, date_str: str):
+    try:
+        target_date = parse_date_smart(date_str)
+    except:
+        await ctx.send("❌ ใช้ `!testcase DD/MM/YYYY`")
+        return
+
+    await ctx.send("⏳ กำลังเขียนข้อมูลลง Google Sheet...")
+
+    try:
+        written, skipped = await asyncio.to_thread(
+            run_testcase_sync,
+            target_date
+        )
+    except Exception as e:
+        await ctx.send(f"❌ Error: {e}")
+        return
+
     embed = Embed(
         title="🧪 Testcase → Google Sheet",
         description=f"📅 วันที่: {target_date.strftime('%d/%m/%Y')}",
         color=0x2ecc71
     )
-
     embed.add_field(
         name="✅ เขียนสำเร็จ",
         value=f"{written} คน",
@@ -1790,6 +1792,7 @@ async def testcase(ctx, date_str: str):
 
     embed.set_footer(text="TEST MODE — เขียนลงชีทจริง")
     await ctx.send(embed=embed)
+
 
 #@bot.command()
 #async def audit(ctx, limit: int = 10):
