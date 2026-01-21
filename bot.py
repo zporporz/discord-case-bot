@@ -11,7 +11,6 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
-from gspread.utils import rowcol_to_a1
 HEADER_ROW = 4
 NAME_COLUMN = 2   # คอลัมน์ชื่อเจ้าหน้าที่ (B)
 
@@ -1704,6 +1703,8 @@ async def checkuphill(ctx, *, args: str = None):
     embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
 
+from gspread.utils import rowcol_to_a1
+
 def run_daily_case_sync(target_date):
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -1731,8 +1732,10 @@ def run_daily_case_sync(target_date):
 
     sheet = get_sheet()
 
-    # ✅ หา column ของวัน + ขยับไป case/day
     col = find_day_column(target_date.day)
+    if col is None:
+        raise RuntimeError(f"❌ ไม่พบ column ของวันที่ {target_date.day}")
+
     case_col = col + 1
 
     name_row_map = build_name_row_map(sheet)
@@ -1743,21 +1746,16 @@ def run_daily_case_sync(target_date):
 
     for norm_name, total_cases in rows:
         row = name_row_map.get(norm_name)
-        if not row:
+        if row is None:
             skipped.append(norm_name)
             continue
-    updates.append({
-        "range": rowcol_to_a1(row, case_col),
-        "values": [[str(total_cases)]]
-    })
-    written += 1
 
-    if updates:
-        sheet.batch_update(updates)
+        updates.append({
+            "range": rowcol_to_a1(row, case_col),
+            "values": [[str(total_cases)]]
+        })
+        written += 1
 
-
-
-    # ✅ WRITE ทีเดียว
     if updates:
         sheet.batch_update(updates)
 
