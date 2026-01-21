@@ -1718,11 +1718,13 @@ def run_daily_case_sync(target_date):
         with conn.cursor() as cur:
             cur.execute(r"""
                 SELECT
-                    LOWER(
-                        REGEXP_REPLACE(
-                            REGEXP_REPLACE(name, '^\+?\d+\s*', ''),
-                            '\[.*?\]\s*', '',
-                            'g'
+                    TRIM(
+                        LOWER(
+                            REGEXP_REPLACE(
+                                REGEXP_REPLACE(name, '^\+?\d+\s*', ''),
+                                '\[.*?\]\s*', '',
+                                'g'
+                            )
                         )
                     ) AS norm_name,
                     SUM(cases)
@@ -1739,11 +1741,7 @@ def run_daily_case_sync(target_date):
         return 0, []
 
     sheet = get_sheet()
-
     col = find_day_column(target_date.day)
-    if col is None:
-        raise RuntimeError(f"❌ ไม่พบ column ของวันที่ {target_date.day}")
-
     case_col = col + 1
 
     name_row_map = build_name_row_map(sheet)
