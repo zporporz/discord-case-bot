@@ -1,11 +1,13 @@
 import gspread
+import os
+import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # ======================
 # CONFIG
 # ======================
-SHEET_NAME = "GloriousTown Police-ข้อมูล"
+SHEET_NAME = "GloriousTown Police-ลงข้อมูล"
 WORKSHEET_NAME = "เวลาและเคส มกราคม 69"
 
 # column ที่เป็นชื่อ (จากภาพคือคอลัมน์ B)
@@ -13,7 +15,10 @@ NAME_COLUMN = 2
 HEADER_ROW = 4   # แถวที่มีหัววันที่ (18, 19, 20, ...)
 
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
 # ======================
 # INTERNAL
@@ -23,18 +28,24 @@ _sheet_cache = None
 
 def get_sheet():
     global _sheet_cache
-
     if _sheet_cache:
         return _sheet_cache
 
-    creds = Credentials.from_service_account_file(
-        "google-service-account.json",
+    sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not sa_json:
+        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON not set")
+
+    creds_info = json.loads(sa_json)
+
+    creds = Credentials.from_service_account_info(
+        creds_info,
         scopes=SCOPES
     )
+
     gc = gspread.authorize(creds)
     _sheet_cache = gc.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
-
     return _sheet_cache
+
 
 
 def find_row_by_name(name: str):
@@ -90,7 +101,4 @@ def write_daily_hours(
     print(f"✅ Sheet updated {cell} = {hours_text}")
     return True
 
-if __name__ == "__main__":
-    row = find_row_by_name("Lion Kuryu")
-    print("ROW =", row)
 
