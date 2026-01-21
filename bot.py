@@ -11,6 +11,8 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
+HEADER_ROW = 4
+
 from sheet import (
     write_daily_hours,
     find_day_column,
@@ -1746,20 +1748,25 @@ async def testcase(ctx, date_str: str):
             if not row:
                 skipped.append(name)
                 continue
-
             col = find_day_column(target_date.day)
-            cell = sheet.cell(row, col)
+            case_col = col + 1   # 👉 ขยับไปฝั่ง case./day
 
-            # รูปแบบข้อความในชีท
+            # 🛡️ Safety check: ต้องเป็น case./day เท่านั้น
+            sub_header = sheet.cell(HEADER_ROW + 1, case_col).value or ""
+            if "case" not in sub_header.lower():
+                raise RuntimeError(
+                    f"Wrong column detected (row {HEADER_ROW + 1}, col {case_col}): {sub_header}"
+                )
+
             value = str(total_cases)   # ✅ ตัวเลขล้วน
-
-            sheet.update_cell(row, col, value)
+            sheet.update_cell(row, case_col, value)  # ✅ ใช้ case_col
 
             written += 1
 
         except Exception as e:
             print("❌ Sheet write error:", name, e)
             skipped.append(name)
+
 
     # ===== ตอบ Discord =====
     embed = Embed(
