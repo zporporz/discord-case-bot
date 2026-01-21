@@ -24,14 +24,8 @@ SCOPES = [
 # ======================
 # INTERNAL
 # ======================
-_sheet_cache = None
-
 
 def get_sheet():
-    global _sheet_cache
-    if _sheet_cache:
-        return _sheet_cache
-
     sa_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     if not sa_json:
         raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON not set")
@@ -44,8 +38,8 @@ def get_sheet():
     )
 
     gc = gspread.authorize(creds)
-    _sheet_cache = gc.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
-    return _sheet_cache
+    return gc.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
+
 
 def normalize_sheet_name(name: str) -> str:
     if not name:
