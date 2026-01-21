@@ -1702,7 +1702,7 @@ async def checkuphill(ctx, *, args: str = None):
     embed.set_footer(text=SYSTEM_FOOTER)
     await ctx.send(embed=embed)
 
-def run_testcase_sync(target_date):
+def run_daily_case_sync(target_date):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(r"""
@@ -1758,18 +1758,18 @@ def run_testcase_sync(target_date):
 
 @bot.command()
 @is_pbt()
-async def testcase(ctx, date_str: str):
+async def sync(ctx, date_str: str):
     try:
         target_date = parse_date_smart(date_str)
     except:
-        await ctx.send("❌ ใช้ `!testcase DD/MM/YYYY`")
+        await ctx.send("❌ ใช้ `!sync DD/MM/YYYY`")
         return
 
     await ctx.send("⏳ กำลังเขียนข้อมูลลง Google Sheet...")
 
     try:
         written, skipped = await asyncio.to_thread(
-            run_testcase_sync,
+            run_daily_case_sync,
             target_date
         )
     except Exception as e:
@@ -1777,7 +1777,7 @@ async def testcase(ctx, date_str: str):
         return
 
     embed = Embed(
-        title="🧪 Testcase → Google Sheet",
+        title="📊 เขียนข้อมูลลง Google Sheet",
         description=f"📅 วันที่: {target_date.strftime('%d/%m/%Y')}",
         color=0x2ecc71
     )
@@ -1794,7 +1794,7 @@ async def testcase(ctx, date_str: str):
             inline=False
         )
 
-    embed.set_footer(text="TEST MODE — เขียนลงชีทจริง")
+    embed.set_footer(text="เขียนลง Google Sheet เรียบร้อย")
     await ctx.send(embed=embed)
 
 
@@ -1892,6 +1892,7 @@ async def cmd(ctx):
         name="🛠️ เครื่องมือ",
         value=(
             "`!time` — ⏰ ตรวจเวลาของบอท (TH / UTC+7)\n"
+            "`!sync DD/MM[/YYYY]` — 📊 เขียนจำนวนเคสลง Google Sheet\n"
             "`!cmd` — 📖 ดูคำสั่งทั้งหมด"
         ),
         inline=False
