@@ -14,13 +14,8 @@ import asyncio
 HEADER_ROW = 4
 NAME_COLUMN = 2   # คอลัมน์ชื่อเจ้าหน้าที่ (B)
 
-from sheet import (
-    write_daily_hours,
-    find_day_column,
-    find_row_by_name,
-    get_sheet
-)
-import sheet
+from sheet import get_sheet, find_day_column
+
 # ======================
 
 SYSTEM_FOOTER = "Created by Lion Kuryu • Police Case Management System"
