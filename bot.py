@@ -1753,7 +1753,7 @@ def run_daily_case_sync(target_date):
     for norm_name, total_cases in rows:
         row = name_row_map.get(norm_name)
         if row is None:
-            print("SKIP:", repr(norm_name))
+            #print("SKIP:", repr(norm_name))
             skipped.append(norm_name)
             continue
 

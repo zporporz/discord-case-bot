@@ -59,7 +59,6 @@ def find_day_column(day: int):
 
     raise ValueError(f"ไม่พบ column ของวันที่ {day}")
 
-
 def build_name_row_map(sheet):
     names = sheet.col_values(NAME_COLUMN)  # READ ครั้งเดียว
     mapping = {}
