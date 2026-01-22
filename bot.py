@@ -460,40 +460,10 @@ def process_case_message(message):
         )
 
 def get_body_work_window(target_date):
-    """
-    สำหรับวันที่ X
-    นับตั้งแต่ X-1 18:30 → X 06:00
-    """
-    start = datetime.combine(
-        target_date - timedelta(days=1),
-        datetime.min.time(),
-        tzinfo=TH_TZ
-    ).replace(hour=18, minute=30)
-
-    end = datetime.combine(
-        target_date,
-        datetime.min.time(),
-        tzinfo=TH_TZ
-    ).replace(hour=6, minute=0)
-
+    now = now_th()
+    start = now - timedelta(minutes=30)
+    end = now + timedelta(minutes=30)
     return start, end
-
-async def count_body_cases_for_date(target_date):
-    start, end = get_body_work_window(target_date)
-
-    total = 0
-
-    for channel_id in BODY_CHANNEL_IDS:
-        channel = bot.get_channel(channel_id)
-        if not channel:
-            continue
-
-        async for msg in channel.history(after=start, before=end, limit=None):
-            if msg.author.bot:
-                continue
-            total += 1
-
-    return total, start, end
 
 
 def save_body_case_daily(work_date, start, end, total):
