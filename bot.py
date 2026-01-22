@@ -1068,15 +1068,15 @@ async def body_case_auto_sync():
                 value=f"{result['total']} เคส",
                 inline=False
             )       
-            else:
+        else:
                 embed.add_field(
                     name="📭 สถานะ",
                     value="วันนี้ไม่มีเคส",
                     inline=False
-                )
+            )
 
-            embed.set_footer(text="🔒 Auto-sync เวลา 06:05")
-            await channel.send(embed=embed)
+        embed.set_footer(text="🔒 Auto-sync เวลา 06:05")
+        await channel.send(embed=embed)
 
         # กัน loop ยิงซ้ำ
         await asyncio.sleep(60)
