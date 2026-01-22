@@ -2132,13 +2132,17 @@ async def testbody(ctx, date_str: str):
 
     result = await count_body_cases_split(target_date)
 
+    # ✅ SAVE DB
+    save_body_case_daily_split(result)
+
     await ctx.send(
         "🧪 Body Case Test (Split)\n"
         f"📅 {result['date']}\n"
         f"⏰ {result['start'].strftime('%H:%M')} → {result['end'].strftime('%H:%M')}\n"
         f"🧪 ชุบ: {result['chub']} เคส\n"
         f"🧳 ช่วยอุ้ม/ห่อ: {result['wrap']} เคส\n"
-        f"📦 รวมทั้งหมด: {result['total']} เคส"
+        f"📦 รวมทั้งหมด: {result['total']} เคส\n"
+        f"💾 บันทึกลง DB แล้ว"
     )
 
 
