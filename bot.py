@@ -1915,10 +1915,30 @@ async def sync(ctx, date_str: str):
 async def count_body_cases_for_date(target_date):
     start, end = get_body_work_window(target_date)
 
-    print("🧪 BODY WINDOW:", start, "→", end)
-
-    # 🔧 โหมดเทส: ยังไม่นับ DB
     total = 0
+
+    for channel_id in BODY_CHANNEL_IDS:
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            continue
+
+        async for msg in channel.history(
+            after=start,
+            before=end,
+            limit=None
+        ):
+            if msg.author.bot:
+                continue
+
+            total += 1
+
+    # debug ชัด ๆ
+    print(
+        f"[BODY COUNT] {target_date} | "
+        f"{start.strftime('%H:%M')} → {end.strftime('%H:%M')} | "
+        f"total={total}"
+    )
+
     return total, start, end
 
 @bot.command()
