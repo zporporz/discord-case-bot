@@ -36,10 +36,6 @@ DASHBOARD_REACTIONS = [
 
 SHEET_SYNC_REPORT_CHANNEL_ID = 1393544204960927764
 
-BODY_CHANNEL_IDS = {
-    1462829757099151524,  # อุ้มอำพราง / ช่วยอุ้มศพ
-    1462829791605559367   # ช่วยห่ออุ้มศพ
-}
 BODY_CHUB_CHANNEL_ID = 1462829757099151524      # อุ้มอำพราง / ช่วยอุ้มศพ
 BODY_WRAP_CHANNEL_ID = 1462829791605559367      # ช่วยห่ออุ้มศพ
 
@@ -489,21 +485,20 @@ def process_case_message(message):
             )
         )
 
-def get_body_work_window(target_date):
+def get_body_work_window(work_date):
+    """
+    วันทำงาน = 06:00 ของ work_date
+            → 05:59 ของวันถัดไป
+    """
     start = datetime.combine(
-        target_date - timedelta(days=1),
-        datetime.min.time(),
-        tzinfo=TH_TZ
-    ).replace(hour=18, minute=30)
-
-    end = datetime.combine(
-        target_date,
+        work_date,
         datetime.min.time(),
         tzinfo=TH_TZ
     ).replace(hour=6, minute=0)
 
-    return start, end
+    end = start + timedelta(days=1) - timedelta(minutes=1)
 
+    return start, end
 
 def save_body_case_daily_split(result):
     with get_conn() as conn:
@@ -1004,82 +999,52 @@ async def body_case_auto_sync():
 
     while not bot.is_closed():
         now = now_th()
-
-        target = now.replace(
-            hour=6, minute=5, second=0, microsecond=0
-        )
-
+        target = now.replace(hour=6, minute=5, second=0, microsecond=0)
         if now >= target:
             target += timedelta(days=1)
 
-        sleep_seconds = (target - now).total_seconds()
-        print(f"⏳ Body auto-sync in {int(sleep_seconds)}s")
-        await asyncio.sleep(sleep_seconds)
+        await asyncio.sleep((target - now).total_seconds())
 
-        work_date = today_th()
+        # 🔑 สำคัญ: ใช้ "เมื่อวาน" เป็น work_date
+        work_date = today_th() - timedelta(days=1)
 
         # 🔒 LOCK CHECK
         last_synced = get_last_body_sync()
         if last_synced == work_date.isoformat():
-            print("ℹ️ Body case already synced today, skip")
+            print("ℹ️ Body case already synced, skip")
             await asyncio.sleep(60)
             continue
 
-        # 🔹 คำนวณช่วงเวลา
-        start, end = get_body_work_window(work_date)
-
         result = await count_body_cases_split(work_date)
-        total = result["total"]
         save_body_case_daily_split(result)
 
-
-        # 🔒 SET LOCK
         set_last_body_sync(work_date.isoformat())
 
-        print(
-            f"✅ Body case synced | "
-            f"date={work_date} total={total}"
+        embed = Embed(
+            title="🧾 Body Case Daily Summary",
+            description=(
+                f"📅 วันที่: {work_date}\n"
+                f"⏰ {result['start'].strftime('%H:%M')} → {result['end'].strftime('%H:%M')}"
+            ),
+            color=0xe67e22
         )
 
-        # 🔔 ส่ง dashboard
-        if channel:
-            embed = Embed(
-                title="🧾 Body Case Daily Summary",
-                description=(
-                    f"📅 วันที่: {work_date}\n"
-                    f"⏰ {start.strftime('%H:%M')} → {end.strftime('%H:%M')}"
-                ),
-                color=0xe67e22
-            )
-
-            if total > 0:
-                embed.add_field(
-                name="🧪 ชุบ",
-                value=f"{result['chub']} เคส",
-                inline=True
-            )
-                embed.add_field(
-                name="🧳 ช่วยอุ้ม/ห่อ",
-                value=f"{result['wrap']} เคส",
-                inline=True
-            )
-                embed.add_field(
-                name="📦 รวมทั้งหมด",
-                value=f"{result['total']} เคส",
-                inline=False
-            )       
+        if result["total"] > 0:
+            embed.add_field(name="🧪 ชุบ", value=f"{result['chub']} เคส", inline=True)
+            embed.add_field(name="🧳 ช่วยอุ้ม/ห่อ", value=f"{result['wrap']} เคส", inline=True)
+            embed.add_field(name="📦 รวมทั้งหมด", value=f"{result['total']} เคส", inline=False)
         else:
-                embed.add_field(
-                    name="📭 สถานะ",
-                    value="วันนี้ไม่มีเคส",
-                    inline=False
+            embed.add_field(
+                name="📭 สถานะ",
+                value="วันนี้ไม่มีเคส",
+                inline=False
             )
 
-        embed.set_footer(text="🔒 Auto-sync เวลา 06:05")
+        embed.set_footer(text="⏰ Auto-sync เวลา 06:05")
         await channel.send(embed=embed)
 
-        # กัน loop ยิงซ้ำ
         await asyncio.sleep(60)
+
         
 @bot.event
 async def on_ready():
@@ -2051,53 +2016,35 @@ async def sync(ctx, date_str: str):
     embed.set_footer(text="เขียนลง Google Sheet เรียบร้อย")
     await ctx.send(embed=embed)
 
-async def count_body_cases_split(target_date):
-    start, end = get_body_work_window(target_date)
+async def count_body_cases_split(work_date):
+    start, end = get_body_work_window(work_date)
 
     chub = 0
     wrap = 0
 
-    # 🔹 ชุบ / อุ้มอำพราง
     chub_channel = bot.get_channel(BODY_CHUB_CHANNEL_ID)
     if chub_channel:
-        async for msg in chub_channel.history(
-            after=start,
-            before=end,
-            limit=None
-        ):
-            if msg.author.bot:
-                continue
-            chub += 1
+        async for msg in chub_channel.history(after=start, before=end, limit=None):
+            if not msg.author.bot:
+                chub += 1
 
-    # 🔹 ช่วยห่อ / ช่วยอุ้ม
     wrap_channel = bot.get_channel(BODY_WRAP_CHANNEL_ID)
     if wrap_channel:
-        async for msg in wrap_channel.history(
-            after=start,
-            before=end,
-            limit=None
-        ):
-            if msg.author.bot:
-                continue
-            wrap += 1
+        async for msg in wrap_channel.history(after=start, before=end, limit=None):
+            if not msg.author.bot:
+                wrap += 1
 
     total = chub + wrap
 
-    # debug ชัด ๆ
-    print(
-        f"[BODY SPLIT] {target_date} | "
-        f"{start.strftime('%H:%M')} → {end.strftime('%H:%M')} | "
-        f"chub={chub} wrap={wrap} total={total}"
-    )
-
     return {
-        "date": target_date,
+        "date": work_date,
         "start": start,
         "end": end,
         "chub": chub,
         "wrap": wrap,
         "total": total
     }
+
 
 @bot.command()
 @is_pbt()
