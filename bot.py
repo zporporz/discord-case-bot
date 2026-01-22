@@ -510,6 +510,37 @@ def save_body_case_daily(work_date, start, end, total):
                     synced_at = NOW();
             """, (work_date, start, end, total))
 
+def save_body_case_daily_split(result):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO body_case_daily (
+                    work_date,
+                    start_time,
+                    end_time,
+                    chub_posts,
+                    wrap_posts,
+                    total_posts,
+                    synced_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (work_date)
+                DO UPDATE SET
+                    start_time = EXCLUDED.start_time,
+                    end_time = EXCLUDED.end_time,
+                    chub_posts = EXCLUDED.chub_posts,
+                    wrap_posts = EXCLUDED.wrap_posts,
+                    total_posts = EXCLUDED.total_posts,
+                    synced_at = NOW();
+            """, (
+                result["date"],
+                result["start"],
+                result["end"],
+                result["chub"],
+                result["wrap"],
+                result["total"]
+            ))
+
 def now_th():
     return datetime.now(TH_TZ)
 
