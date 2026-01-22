@@ -2102,6 +2102,7 @@ async def count_body_cases_split(target_date):
 @bot.command()
 @is_pbt()
 async def testbody(ctx, date_str: str):
+    print("🔥 testbody CALLED")
     try:
         target_date = parse_date_smart(date_str)
     except:
