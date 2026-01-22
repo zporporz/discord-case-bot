@@ -1912,6 +1912,15 @@ async def sync(ctx, date_str: str):
     embed.set_footer(text="เขียนลง Google Sheet เรียบร้อย")
     await ctx.send(embed=embed)
 
+async def count_body_cases_for_date(target_date):
+    start, end = get_body_work_window(target_date)
+
+    print("🧪 BODY WINDOW:", start, "→", end)
+
+    # 🔧 โหมดเทส: ยังไม่นับ DB
+    total = 0
+    return total, start, end
+
 @bot.command()
 @is_pbt()
 async def testbody(ctx, date_str: str):
