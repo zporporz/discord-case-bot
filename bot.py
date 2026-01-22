@@ -490,25 +490,20 @@ def process_case_message(message):
         )
 
 def get_body_work_window(target_date):
-    now = now_th()
-    start = now - timedelta(minutes=30)
-    end = now + timedelta(minutes=30)
+    start = datetime.combine(
+        target_date - timedelta(days=1),
+        datetime.min.time(),
+        tzinfo=TH_TZ
+    ).replace(hour=18, minute=30)
+
+    end = datetime.combine(
+        target_date,
+        datetime.min.time(),
+        tzinfo=TH_TZ
+    ).replace(hour=6, minute=0)
+
     return start, end
 
-
-def save_body_case_daily(work_date, start, end, total):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO body_case_daily
-                    (work_date, start_time, end_time, total_posts, synced_at)
-                VALUES
-                    (%s, %s, %s, %s, NOW())
-                ON CONFLICT (work_date)
-                DO UPDATE SET
-                    total_posts = EXCLUDED.total_posts,
-                    synced_at = NOW();
-            """, (work_date, start, end, total))
 
 def save_body_case_daily_split(result):
     with get_conn() as conn:
@@ -1033,8 +1028,10 @@ async def body_case_auto_sync():
         # 🔹 คำนวณช่วงเวลา
         start, end = get_body_work_window(work_date)
 
-        total = await count_body_cases_for_date(work_date)
-        save_body_case_daily(work_date, start, end, total)
+        result = await count_body_cases_split(work_date)
+        total = result["total"]
+        save_body_case_daily_split(result)
+
 
         # 🔒 SET LOCK
         set_last_body_sync(work_date.isoformat())
@@ -1057,10 +1054,20 @@ async def body_case_auto_sync():
 
             if total > 0:
                 embed.add_field(
-                    name="📦 รวมทั้งหมด",
-                    value=f"{total} เคส",
-                    inline=False
-                )
+                name="🧪 ชุบ",
+                value=f"{result['chub']} เคส",
+                inline=True
+            )
+            embed.add_field(
+                name="🧳 ช่วยอุ้ม/ห่อ",
+                value=f"{result['wrap']} เคส",
+                inline=True
+            )
+            embed.add_field(
+                name="📦 รวมทั้งหมด",
+                value=f"{result['total']} เคส",
+                inline=False
+            )       
             else:
                 embed.add_field(
                     name="📭 สถานะ",
@@ -2043,35 +2050,6 @@ async def sync(ctx, date_str: str):
 
     embed.set_footer(text="เขียนลง Google Sheet เรียบร้อย")
     await ctx.send(embed=embed)
-
-async def count_body_cases_for_date(target_date):
-    start, end = get_body_work_window(target_date)
-
-    total = 0
-
-    for channel_id in BODY_CHANNEL_IDS:
-        channel = bot.get_channel(channel_id)
-        if not channel:
-            continue
-
-        async for msg in channel.history(
-            after=start,
-            before=end,
-            limit=None
-        ):
-            if msg.author.bot:
-                continue
-
-            total += 1
-
-    # debug ชัด ๆ
-    print(
-        f"[BODY COUNT] {target_date} | "
-        f"{start.strftime('%H:%M')} → {end.strftime('%H:%M')} | "
-        f"total={total}"
-    )
-
-    return total, start, end
 
 async def count_body_cases_split(target_date):
     start, end = get_body_work_window(target_date)
