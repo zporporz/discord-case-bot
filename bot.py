@@ -36,6 +36,13 @@ DASHBOARD_REACTIONS = [
 
 SHEET_SYNC_REPORT_CHANNEL_ID = 1393544204960927764
 
+BODY_CHANNEL_IDS = {
+    1462829757099151524,  # อุ้มอำพราง / ช่วยอุ้มศพ
+    1462829791605559367   # ช่วยห่ออุ้มศพ
+}
+
+BODY_DASHBOARD_CHANNEL_ID = 1449425399397482789
+
 # ======================
 # ENV / CONSTANTS
 # ======================
@@ -452,6 +459,56 @@ def process_case_message(message):
             )
         )
 
+def get_body_work_window(target_date):
+    """
+    สำหรับวันที่ X
+    นับตั้งแต่ X-1 18:30 → X 06:00
+    """
+    start = datetime.combine(
+        target_date - timedelta(days=1),
+        datetime.min.time(),
+        tzinfo=TH_TZ
+    ).replace(hour=18, minute=30)
+
+    end = datetime.combine(
+        target_date,
+        datetime.min.time(),
+        tzinfo=TH_TZ
+    ).replace(hour=6, minute=0)
+
+    return start, end
+
+async def count_body_cases_for_date(target_date):
+    start, end = get_body_work_window(target_date)
+
+    total = 0
+
+    for channel_id in BODY_CHANNEL_IDS:
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            continue
+
+        async for msg in channel.history(after=start, before=end, limit=None):
+            if msg.author.bot:
+                continue
+            total += 1
+
+    return total, start, end
+
+
+def save_body_case_daily(work_date, start, end, total):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO body_case_daily
+                    (work_date, start_time, end_time, total_posts, synced_at)
+                VALUES
+                    (%s, %s, %s, %s, NOW())
+                ON CONFLICT (work_date)
+                DO UPDATE SET
+                    total_posts = EXCLUDED.total_posts,
+                    synced_at = NOW();
+            """, (work_date, start, end, total))
 
 def now_th():
     return datetime.now(TH_TZ)
@@ -1884,6 +1941,25 @@ async def sync(ctx, date_str: str):
 
     embed.set_footer(text="เขียนลง Google Sheet เรียบร้อย")
     await ctx.send(embed=embed)
+
+@bot.command()
+@is_pbt()
+async def testbody(ctx, date_str: str):
+    try:
+        target_date = parse_date_smart(date_str)
+    except:
+        await ctx.send("❌ ใช้ `!testbody DD/MM/YYYY`")
+        return
+
+    total, start, end = await count_body_cases_for_date(target_date)
+    save_body_case_daily(target_date, start, end, total)
+
+    await ctx.send(
+        f"🧪 Body Case Test\n"
+        f"📅 {target_date}\n"
+        f"⏰ {start.strftime('%H:%M')} → {end.strftime('%H:%M')}\n"
+        f"📦 รวม {total} เคส"
+    )
 
 
 #@bot.command()
