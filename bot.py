@@ -1058,12 +1058,12 @@ async def body_case_auto_sync():
                 value=f"{result['chub']} เคส",
                 inline=True
             )
-            embed.add_field(
+                embed.add_field(
                 name="🧳 ช่วยอุ้ม/ห่อ",
                 value=f"{result['wrap']} เคส",
                 inline=True
             )
-            embed.add_field(
+                embed.add_field(
                 name="📦 รวมทั้งหมด",
                 value=f"{result['total']} เคส",
                 inline=False
