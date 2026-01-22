@@ -11,10 +11,8 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
-HEADER_ROW = 4
-NAME_COLUMN = 2   # คอลัมน์ชื่อเจ้าหน้าที่ (B)
 
-from sheet import get_sheet, find_day_column
+from sheet import get_sheet, find_day_column, write_body_case_total, build_name_row_map
 
 # ======================
 
@@ -425,6 +423,27 @@ def set_last_body_sync(date_str: str):
                 """, (date_str,))
     except Exception as e:
         print("❌ set_last_body_sync error:", e)
+
+def get_body_dashboard_message_id():
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT value FROM bot_meta
+                WHERE key = 'body_dashboard_message_id'
+            """)
+            row = cur.fetchone()
+            return int(row[0]) if row else None
+
+
+def set_body_dashboard_message_id(msg_id: int):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO bot_meta (key, value)
+                VALUES ('body_dashboard_message_id', %s)
+                ON CONFLICT (key)
+                DO UPDATE SET value = EXCLUDED.value
+            """, (str(msg_id),))
 
 # ======================
 # UTILS
@@ -868,6 +887,25 @@ async def weekly_ranking_updater():
         # กันยิงซ้ำในนาทีเดียว
         await asyncio.sleep(60)
 
+def build_body_dashboard_embed(result, work_date):
+    embed = Embed(
+        title="🧾 Body Case Dashboard",
+        description=(
+            f"📅 วันที่ปฏิบัติงาน: {work_date}\n"
+            f"⏰ ช่วงเวลา: {result['start'].strftime('%H:%M')} → {result['end'].strftime('%H:%M')}\n\n"
+            f"🧪 ชุบ: {result['chub']} เคส\n"
+            f"🧳 ช่วยอุ้ม/ห่อ: {result['wrap']} เคส\n"
+            f"📦 **รวมทั้งหมด: {result['total']} เคส**\n\n"
+            f"🧾 เขียนลง Google Sheet เรียบร้อยแล้ว"
+        ),
+        color=0xe67e22
+    )
+
+    embed.set_footer(
+        text=f"🔄 อัปเดทล่าสุด {now_th().strftime('%d/%m/%Y %H:%M')} • Auto-sync 06:05"
+    )
+    return embed
+
 
 # ======================
 # DISCORD SETUP
@@ -999,52 +1037,80 @@ async def body_case_auto_sync():
 
     while not bot.is_closed():
         now = now_th()
+
         target = now.replace(hour=6, minute=5, second=0, microsecond=0)
         if now >= target:
             target += timedelta(days=1)
 
         await asyncio.sleep((target - now).total_seconds())
 
-        # 🔑 สำคัญ: ใช้ "เมื่อวาน" เป็น work_date
+        # 🔑 ใช้ "เมื่อวาน" เป็นวันทำงาน
         work_date = today_th() - timedelta(days=1)
 
-        # 🔒 LOCK CHECK
+        # 🔒 LOCK กันยิงซ้ำ
         last_synced = get_last_body_sync()
         if last_synced == work_date.isoformat():
             print("ℹ️ Body case already synced, skip")
             await asyncio.sleep(60)
             continue
 
+        # 🔢 นับเคส
         result = await count_body_cases_split(work_date)
+
+        # 💾 บันทึก DB
         save_body_case_daily_split(result)
 
+        # 📊 เขียน Google Sheet (Body Case)
+        write_body_case_total(
+            work_date,
+            result["total"]
+        )
+
+        # 🔒 set lock
         set_last_body_sync(work_date.isoformat())
 
+        # ======================
+        # 🧾 BUILD DASHBOARD EMBED
+        # ======================
         embed = Embed(
-            title="🧾 Body Case Daily Summary",
+            title="🧾 Body Case Dashboard",
             description=(
-                f"📅 วันที่: {work_date}\n"
-                f"⏰ {result['start'].strftime('%H:%M')} → {result['end'].strftime('%H:%M')}"
+                f"📅 วันที่ปฏิบัติงาน: {work_date}\n"
+                f"⏰ {result['start'].strftime('%H:%M')} → {result['end'].strftime('%H:%M')}\n\n"
+                f"🧪 ชุบ: {result['chub']} เคส\n"
+                f"🧳 ช่วยอุ้ม/ห่อ: {result['wrap']} เคส\n"
+                f"📦 **รวมทั้งหมด: {result['total']} เคส**\n\n"
+                f"🧾 เขียนลง Google Sheet เรียบร้อยแล้ว"
             ),
             color=0xe67e22
         )
 
-        if result["total"] > 0:
-            embed.add_field(name="🧪 ชุบ", value=f"{result['chub']} เคส", inline=True)
-            embed.add_field(name="🧳 ช่วยอุ้ม/ห่อ", value=f"{result['wrap']} เคส", inline=True)
-            embed.add_field(name="📦 รวมทั้งหมด", value=f"{result['total']} เคส", inline=False)
-        else:
-            embed.add_field(
-                name="📭 สถานะ",
-                value="วันนี้ไม่มีเคส",
-                inline=False
-            )
+        embed.set_footer(
+            text=f"🔄 อัปเดทล่าสุด {now_th().strftime('%d/%m/%Y %H:%M')} • Auto-sync 06:05"
+        )
 
-        embed.set_footer(text="⏰ Auto-sync เวลา 06:05")
-        await channel.send(embed=embed)
+        # ======================
+        # 📌 DASHBOARD MESSAGE (send ครั้งแรก / edit ครั้งถัดไป)
+        # ======================
+        msg_id = get_body_dashboard_message_id()
+
+        try:
+            if msg_id:
+                # 🔁 แก้ข้อความเดิม
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed)
+                print("🔄 Body dashboard updated")
+            else:
+                # 🆕 ครั้งแรก
+                msg = await channel.send(embed=embed)
+                await msg.pin()
+                set_body_dashboard_message_id(msg.id)
+                print("🆕 Body dashboard created")
+
+        except Exception as e:
+            print("❌ Body dashboard error:", e)
 
         await asyncio.sleep(60)
-
         
 @bot.event
 async def on_ready():
@@ -1962,18 +2028,6 @@ def run_daily_case_sync(target_date):
         sheet.batch_update(updates)
 
     return written, skipped
-
-
-def build_name_row_map(sheet):
-    names = sheet.col_values(NAME_COLUMN)  # 🔴 READ ครั้งเดียว
-    mapping = {}
-
-    for idx, cell in enumerate(names, start=1):
-        norm = normalize_name(cell)
-        if norm:
-            mapping[norm] = idx
-
-    return mapping
 
 @bot.command()
 @is_pbt()
