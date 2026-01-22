@@ -2373,6 +2373,35 @@ async def confirm(ctx, password: str):
     )
    
     await ctx.send("🧨 ลบข้อมูลเรียบร้อย")
+
+@bot.command()
+@is_pbt()
+async def bodydash(ctx, date_str: str = None):
+    # ถ้าไม่ใส่วันที่ → ใช้เมื่อวาน
+    if date_str:
+        work_date = parse_date_smart(date_str)
+    else:
+        work_date = today_th() - timedelta(days=1)
+
+    embed = Embed(
+        title="🧾 Body Case Dashboard",
+        description=(
+            f"📅 วันที่ปฏิบัติงาน: {work_date}\n"
+            f"⏰ ช่วงเวลา: 06:00 → 05:59\n\n"
+            f"⌛ รอระบบ Auto-sync เวลา 06:05"
+        ),
+        color=0xe67e22
+    )
+
+    embed.set_footer(
+        text="🔄 Dashboard ถูกสร้างแล้ว • Auto-sync เวลา 06:05"
+    )
+
+    msg = await ctx.send(embed=embed)
+    await msg.pin()
+    set_body_dashboard_message_id(msg.id)
+
+
 # ======================
 # REGISTER AUDIT COMMANDS
 # ======================
