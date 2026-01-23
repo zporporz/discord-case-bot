@@ -37,7 +37,7 @@ SHEET_SYNC_REPORT_CHANNEL_ID = 1393544204960927764
 BODY_CHUB_CHANNEL_ID = 1462829757099151524      # อุ้มอำพราง / ช่วยอุ้มศพ
 BODY_WRAP_CHANNEL_ID = 1462829791605559367      # ช่วยห่ออุ้มศพ
 
-BODY_DASHBOARD_CHANNEL_ID = 1449425399397482789
+BODY_DASHBOARD_CHANNEL_ID = 1450364332784353281
 
 # ======================
 # ENV / CONSTANTS
@@ -1072,18 +1072,7 @@ async def body_case_auto_sync():
         # ======================
         # 🧾 BUILD DASHBOARD EMBED
         # ======================
-        embed = Embed(
-            title="🧾 Body Case Dashboard",
-            description=(
-                f"📅 วันที่ปฏิบัติงาน: {work_date}\n"
-                f"⏰ {result['start'].strftime('%H:%M')} → {result['end'].strftime('%H:%M')}\n\n"
-                f"🧪 ชุบ: {result['chub']} เคส\n"
-                f"🧳 ช่วยอุ้ม/ห่อ: {result['wrap']} เคส\n"
-                f"📦 **รวมทั้งหมด: {result['total']} เคส**\n\n"
-                f"🧾 เขียนลง Google Sheet เรียบร้อยแล้ว"
-            ),
-            color=0xe67e22
-        )
+        embed = build_body_dashboard_embed(result, work_date)
 
         embed.set_footer(
             text=f"🔄 อัปเดทล่าสุด {now_th().strftime('%d/%m/%Y %H:%M')} • Auto-sync 06:05"
@@ -2124,6 +2113,58 @@ async def testbody(ctx, date_str: str):
         f"📦 รวมทั้งหมด: {result['total']} เคส\n"
         f"💾 บันทึกลง DB แล้ว"
     )
+
+@bot.command()
+@is_pbt()
+async def bodytest(ctx, date_str: str = None):
+    # 1️⃣ เลือกวันที่
+    if date_str:
+        try:
+            work_date = parse_date_smart(date_str)
+        except:
+            await ctx.send("❌ ใช้ `!bodytest DD/MM[/YYYY]`")
+            return
+    else:
+        work_date = today_th() - timedelta(days=1)
+
+    await ctx.send("🧪 กำลังทดสอบ Body Case (Manual mode)...")
+
+    # 2️⃣ นับเคส
+    result = await count_body_cases_split(work_date)
+
+    # 3️⃣ เขียน DB
+    save_body_case_daily_split(result)
+
+    # 4️⃣ เขียน Google Sheet
+    write_body_case_total(
+        work_date,
+        result["total"]
+    )
+
+    # 5️⃣ สร้าง embed
+    embed = build_body_dashboard_embed(result, work_date)
+
+    embed.set_footer(
+        text=f"🧪 Manual test • {now_th().strftime('%d/%m/%Y %H:%M')}"
+    )
+
+    # 6️⃣ ส่ง / แก้ dashboard
+    channel = bot.get_channel(BODY_DASHBOARD_CHANNEL_ID)
+    msg_id = get_body_dashboard_message_id()
+
+    try:
+        if msg_id:
+            msg = await channel.fetch_message(msg_id)
+            await msg.edit(embed=embed)
+            await ctx.send("🔄 แก้ไข Dashboard เดิมเรียบร้อย")
+        else:
+            msg = await channel.send(embed=embed)
+            await msg.pin()
+            set_body_dashboard_message_id(msg.id)
+            await ctx.send("🆕 สร้าง Dashboard ใหม่เรียบร้อย")
+
+    except Exception as e:
+        await ctx.send(f"❌ Dashboard error: `{e}`")
 
 
 #@bot.command()
