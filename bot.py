@@ -2009,7 +2009,7 @@ def run_daily_case_sync(target_date):
 
         updates.append({
             "range": rowcol_to_a1(row, case_col),
-            "values": [[str(total_cases)]]
+            "values": [[(total_cases)]]
         })
         written += 1
 
