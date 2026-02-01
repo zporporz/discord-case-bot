@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 # CONFIG
 # ======================
 SHEET_NAME = "GloriousTown Police-ลงข้อมูล"
-WORKSHEET_NAME = "เวลาและเคส มกราคม 69"
+WORKSHEET_NAME = "เวลาและเคส กุมภาพันธ์ 69"
 
 NAME_COLUMN = 2
 HEADER_ROW = 4
@@ -20,7 +20,7 @@ SCOPES = [
 # ======================
 # BODY CASE CONFIG
 # ======================
-BODY_WORKSHEET_NAME = "รายชื่อร่วมเคสอุ้ม มกราคม 69"
+BODY_WORKSHEET_NAME = "รายชื่อร่วมเคสอุ้ม กุมภาพันธ์ 69"
 BODY_HEADER_ROW = 5   # แถววันที่
 BODY_TOTAL_ROW = 6    # แถวรวมเคสอุ้ม/ชุบ
 
