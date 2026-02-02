@@ -55,25 +55,22 @@ def find_day_column(day: int):
     sheet = get_sheet()
     header = sheet.row_values(HEADER_ROW)
 
-    # ✅ เป้าหมายแบบยืดหยุ่น: "วันที่ 25" หรือ "วันที่   25"
-    target_day = str(day)
+    target_day = int(day)
 
     for idx, cell in enumerate(header, start=1):
         if not cell:
             continue
 
-        # แปลงเป็น string + trim
-        text = str(cell).strip()
+        text = str(cell)
+        text = re.sub(r"\s+", " ", text)  # บีบ whitespace
+        text = text.strip()
 
-        # ✅ บีบ whitespace ทุกแบบให้เหลือช่องเดียว
-        text = re.sub(r"\s+", " ", text)
-
-        # ✅ ต้องเป็นรูปแบบ "วันที่ X" เท่านั้น
-        m = re.match(r"^วันที่ (\d{1,2})$", text)
+        # รองรับ: วันที่1, วันที่ 01, วันที่   1, วันที่ 1 (เสาร์)
+        m = re.search(r"วันที่\s*0*(\d{1,2})", text)
         if not m:
             continue
 
-        if m.group(1) == target_day:
+        if int(m.group(1)) == target_day:
             return idx
 
     raise ValueError(f"ไม่พบ column ของวันที่ {day}")
