@@ -12,7 +12,12 @@ from discord import Embed
 from datetime import timezone
 import asyncio
 
-from sheet import get_sheet, find_day_column, write_body_case_total, build_name_row_map
+from sheet import (
+    get_sheet,
+    find_day_column_safe,   # 👈 เพิ่มตัวนี้
+    write_body_case_total,
+    build_name_row_map
+)
 
 # ======================
 
@@ -515,7 +520,7 @@ def get_body_work_window(work_date):
         tzinfo=TH_TZ
     ).replace(hour=6, minute=0)
 
-    end = start + timedelta(days=1) - timedelta(minutes=1)
+    end = start + timedelta(days=1)
 
     return start, end
 
@@ -1991,7 +1996,7 @@ def run_daily_case_sync(target_date):
         return 0, []
 
     sheet = get_sheet()
-    col = find_day_column(target_date.day)
+    col = find_day_column_safe(target_date)
     case_col = col + 1
 
     name_row_map = build_name_row_map(sheet)

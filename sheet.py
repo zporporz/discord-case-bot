@@ -51,29 +51,78 @@ def normalize_name(name: str) -> str:
     return name.strip().lower()
 
 
-def find_day_column(day: int):
+THAI_MONTHS = {
+    "มกราคม": 1,
+    "กุมภาพันธ์": 2,
+    "มีนาคม": 3,
+    "เมษายน": 4,
+    "พฤษภาคม": 5,
+    "มิถุนายน": 6,
+    "กรกฎาคม": 7,
+    "สิงหาคม": 8,
+    "กันยายน": 9,
+    "ตุลาคม": 10,
+    "พฤศจิกายน": 11,
+    "ธันวาคม": 12,
+}
+
+
+def get_primary_month_from_worksheet():
+    for th_name, month_num in THAI_MONTHS.items():
+        if th_name in WORKSHEET_NAME:
+            return month_num
+    raise ValueError("ไม่พบชื่อเดือนภาษาไทยใน WORKSHEET_NAME")
+
+
+def find_day_column_safe(target_date):
     sheet = get_sheet()
     header = sheet.row_values(HEADER_ROW)
 
-    target_day = int(day)
+    primary_month = get_primary_month_from_worksheet()
+    target_day = target_date.day
+    target_month = target_date.month
+
+    matched_columns = []
 
     for idx, cell in enumerate(header, start=1):
         if not cell:
             continue
 
         text = str(cell)
-        text = re.sub(r"\s+", " ", text)  # บีบ whitespace
-        text = text.strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
-        # รองรับ: วันที่1, วันที่ 01, วันที่   1, วันที่ 1 (เสาร์)
-        m = re.search(r"วันที่\s*0*(\d{1,2})", text)
-        if not m:
+        # 1️⃣ รูปแบบ วันที่ dd/mm
+        m_full = re.search(r"วันที่\s*0*(\d{1,2})\s*/\s*0*(\d{1,2})", text)
+        if m_full:
+            day = int(m_full.group(1))
+            month = int(m_full.group(2))
+            if day == target_day and month == target_month:
+                matched_columns.append(idx)
             continue
 
-        if int(m.group(1)) == target_day:
-            return idx
+        # 2️⃣ รูปแบบ วันที่ dd (ไม่มีเดือน)
+        m_day = re.search(r"วันที่\s*0*(\d{1,2})", text)
+        if m_day:
+            day = int(m_day.group(1))
+            if (
+                day == target_day
+                and target_month == primary_month
+            ):
+                matched_columns.append(idx)
 
-    raise ValueError(f"ไม่พบ column ของวันที่ {day}")
+    if len(matched_columns) == 1:
+        return matched_columns[0]
+
+    if len(matched_columns) == 0:
+        raise ValueError(
+            f"ไม่พบ column ของวันที่ {target_date.strftime('%d/%m')}"
+        )
+
+    raise ValueError(
+        f"พบ column ซ้ำของวันที่ {target_date.strftime('%d/%m')} "
+        f"({matched_columns}) — ป้องกัน silent corruption"
+    )
+
 
 
 def build_name_row_map(sheet):
