@@ -1996,7 +1996,16 @@ def run_daily_case_sync(target_date):
         return 0, []
 
     sheet = get_sheet()
-    col = find_day_column_safe(target_date)
+
+    try:
+        col = find_day_column_safe(target_date)
+    except ValueError:
+        print(
+            f"⚠️ Skip sync: {target_date:%d/%m/%Y} "
+            f"(ยังไม่มี column ใน worksheet)"
+        )
+        return 0, []  # เขียน 0 คน และไม่มี skipped
+
     case_col = col + 1
 
     name_row_map = build_name_row_map(sheet)
