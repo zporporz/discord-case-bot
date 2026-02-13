@@ -11,6 +11,8 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
+import time
+import random
 
 from sheet import (
     get_sheet,
@@ -73,11 +75,26 @@ def is_pbt():
 # ======================
 # DB HELPERS
 # ======================
-def get_conn():
+def get_conn(retries=3, delay=2):
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
-    return psycopg2.connect(DATABASE_URL)
 
+    for attempt in range(retries):
+        try:
+            return psycopg2.connect(
+                DATABASE_URL,
+                connect_timeout=10,
+                sslmode="require",
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5
+            )
+        except psycopg2.OperationalError as e:
+            print(f"⚠️ DB connect failed (attempt {attempt+1}/{retries}):", e)
+            time.sleep(delay)
+
+    raise RuntimeError("❌ Database connection failed after retries")
 
 def save_case_pg(
     name: str,
@@ -227,58 +244,73 @@ def set_last_daily_report(date_str: str):
         print("❌ set_last_daily_report error:", e)
 
 def get_post_summary_by_range(start_date, end_date):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
-                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
-                FROM cases
-                WHERE date BETWEEN %s AND %s
-                  AND is_deleted = FALSE
-            """, (start_date, end_date))
-            return cur.fetchone()
-
-def get_post_summary_by_name_and_date(name, date):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
-                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
-                FROM cases
-                WHERE date = %s
-                  AND name ILIKE %s
-                  AND is_deleted = FALSE
-            """, (date, f"%{name}%"))  # 👈 ตรงนี้
-            return cur.fetchone()
-
-def count_posts_by_type(start_date, end_date=None):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            if end_date:
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT
                         COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
-                        COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts,
-                        COUNT(DISTINCT message_id) AS total_posts
+                        COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
                     FROM cases
                     WHERE date BETWEEN %s AND %s
-                        AND is_deleted = FALSE
-
+                      AND is_deleted = FALSE
                 """, (start_date, end_date))
-            else:
+                row = cur.fetchone()
+                return row if row else (0, 0)
+    except Exception as e:
+        print("❌ get_post_summary_by_range DB error:", e)
+        return (0, 0)
+
+
+def get_post_summary_by_name_and_date(name, date):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
                 cur.execute("""
                     SELECT
                         COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
-                        COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts,
-                        COUNT(DISTINCT message_id) AS total_posts
+                        COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
                     FROM cases
                     WHERE date = %s
-                        AND is_deleted = FALSE
-                """, (start_date,))
+                      AND name ILIKE %s
+                      AND is_deleted = FALSE
+                """, (date, f"%{name}%"))
+                row = cur.fetchone()
+                return row if row else (0, 0)
+    except Exception as e:
+        print("❌ get_post_summary_by_name_and_date DB error:", e)
+        return (0, 0)
 
-            return cur.fetchone()
+
+def count_posts_by_type(start_date, end_date=None):
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if end_date:
+                    cur.execute("""
+                        SELECT
+                            COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
+                            COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts,
+                            COUNT(DISTINCT message_id) AS total_posts
+                        FROM cases
+                        WHERE date BETWEEN %s AND %s
+                          AND is_deleted = FALSE
+                    """, (start_date, end_date))
+                else:
+                    cur.execute("""
+                        SELECT
+                            COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
+                            COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts,
+                            COUNT(DISTINCT message_id) AS total_posts
+                        FROM cases
+                        WHERE date = %s
+                          AND is_deleted = FALSE
+                    """, (start_date,))
+                row = cur.fetchone()
+                return row if row else (0, 0, 0)
+    except Exception as e:
+        print("❌ count_posts_by_type DB error:", e)
+        return (0, 0, 0)
 
 def write_audit(
     action: str,
@@ -315,38 +347,54 @@ async def write_audit_async(**kwargs):
     )
 
 def get_post_summary_by_date(date):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
-                    COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
-                FROM cases
-                WHERE date = %s
-                  AND is_deleted = FALSE
-            """, (date,))
-            return cur.fetchone()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'normal') AS normal_posts,
+                        COUNT(DISTINCT message_id) FILTER (WHERE case_type = 'case10') AS point10_posts
+                    FROM cases
+                    WHERE date = %s
+                      AND is_deleted = FALSE
+                """, (date,))
+                row = cur.fetchone()
+                return row if row else (0, 0)
+    except Exception as e:
+        print("❌ get_post_summary_by_date DB error:", e)
+        return (0, 0)
+
 
 def get_today_summary():
     today = today_th()
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    SUM(cases) FILTER (WHERE case_type = 'normal') AS normal_cases,
-                    SUM(cases) FILTER (WHERE case_type = 'case10') AS point10_cases
-                FROM cases
-                WHERE date = %s
-                  AND is_deleted = FALSE
-            """, (today,))
-            row = cur.fetchone()
 
-            normal = row[0] or 0
-            point10 = row[1] or 0
-            total = normal + point10
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        SUM(cases) FILTER (WHERE case_type = 'normal') AS normal_cases,
+                        SUM(cases) FILTER (WHERE case_type = 'case10') AS point10_cases
+                    FROM cases
+                    WHERE date = %s
+                      AND is_deleted = FALSE
+                """, (today,))
+                row = cur.fetchone()
 
-            return normal, point10, total
-import random
+                if not row:
+                    return 0, 0, 0
+
+                normal = row[0] or 0
+                point10 = row[1] or 0
+                total = normal + point10
+
+                return normal, point10, total
+
+    except Exception as e:
+        print("❌ get_today_summary DB error:", e)
+        # กัน dashboard พังทั้งระบบ
+        return 0, 0, 0
+
 
 async def random_react_dashboard(msg, count=5):
     try:
@@ -579,16 +627,20 @@ def build_case_footer(
 def build_today_embed():
     today = today_th()
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
-                FROM cases
-                WHERE date = %s
-                  AND is_deleted = FALSE
-                GROUP BY name, case_type
-            """, (today,))
-            rows = cur.fetchall()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT name, case_type, COUNT(*) AS inc, SUM(cases) AS total
+                    FROM cases
+                    WHERE date = %s
+                    AND is_deleted = FALSE
+                    GROUP BY name, case_type
+                """, (today,))
+                rows = cur.fetchall()
+    except Exception as e:
+        print("❌ build_today_embed DB error:", e)
+        rows = []
 
     if not rows:
         embed = Embed(
@@ -597,7 +649,6 @@ def build_today_embed():
         )
         embed.set_footer(text=SYSTEM_FOOTER)
         return embed
-
 
     embed = Embed(
         title="📊 Case Summary — Today",
@@ -634,8 +685,14 @@ def build_today_embed():
 
         value += f"📊 **รวมทั้งหมด: {d['normal_cases'] + d['point10_cases']} เคส**"
         embed.add_field(name=f"👤 {name}", value=value, inline=False)
-        
-    normal_posts, point10_posts = get_post_summary_by_date(today)
+
+    # 🔒 กัน DB ล่มตอน footer อีกชั้น
+    try:
+        normal_posts, point10_posts = get_post_summary_by_date(today)
+    except Exception as e:
+        print("❌ footer summary error:", e)
+        normal_posts, point10_posts = 0, 0
+
     embed.set_footer(
         text=(
             build_case_footer(
@@ -653,18 +710,22 @@ def build_today_embed():
 
 def get_top_officers_today(limit=5):
     today = today_th()
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT name, SUM(cases) AS total_cases
-                FROM cases
-                WHERE date = %s
-                  AND is_deleted = FALSE
-                GROUP BY name
-                ORDER BY total_cases DESC
-                LIMIT %s
-            """, (today, limit))
-            return cur.fetchall()
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT name, SUM(cases) AS total_cases
+                    FROM cases
+                    WHERE date = %s
+                      AND is_deleted = FALSE
+                    GROUP BY name
+                    ORDER BY total_cases DESC
+                    LIMIT %s
+                """, (today, limit))
+                return cur.fetchall()
+    except Exception as e:
+        print("❌ get_top_officers_today DB error:", e)
+        return []
 
 def build_top_officers_text(limit=5):
     rows = get_top_officers_today(limit)
@@ -683,8 +744,15 @@ def build_top_officers_text(limit=5):
  
  
 def build_dashboard_embed():
+    # 🔒 ชั้นที่ 1: summary หลัก (กัน DB ล่มแล้วในฟังก์ชัน)
     normal, point10, total = get_today_summary()
-    normal_posts, point10_posts = get_post_summary_by_date(today_th())
+
+    # 🔒 ชั้นที่ 2: footer (กัน DB ล่มแยกอีกชั้น)
+    try:
+        normal_posts, point10_posts = get_post_summary_by_date(today_th())
+    except Exception as e:
+        print("❌ dashboard footer DB error:", e)
+        normal_posts, point10_posts = 0, 0
 
     embed = Embed(
         title="📊 Police Case Management Dashboard",
@@ -716,7 +784,6 @@ def build_dashboard_embed():
     )
 
     return embed
-
 
 def get_dashboard_message_id():
     with get_conn() as conn:
@@ -1124,6 +1191,25 @@ async def on_ready():
     # ✅ AUTO SYNC GOOGLE SHEET
     asyncio.create_task(daily_sheet_auto_sync())
     asyncio.create_task(body_case_auto_sync())
+
+    # ✅ ตรวจสอบสุขภาพ DB
+    asyncio.create_task(db_health_check())
+
+async def db_health_check():
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+            print("🟢 DB Health: OK")
+
+        except Exception as e:
+            print("🚨 DB Health Check FAILED:", e)
+
+        # เช็คทุก 180 วินาที (ไม่หนัก)
+        await asyncio.sleep(180)
 
 def get_last_checked_time():
     try:
