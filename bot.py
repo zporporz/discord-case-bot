@@ -4,6 +4,10 @@
 import os
 import re
 import discord
+import smtplib
+import time
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import psycopg2
 from datetime import datetime, timedelta
 from discord.ext import commands
@@ -75,6 +79,33 @@ def is_pbt():
 # ======================
 # DB HELPERS
 # ======================
+
+def send_email_alert(subject, body):
+    sender = os.getenv("ALERT_EMAIL_FROM")
+    receiver = os.getenv("ALERT_EMAIL_TO")
+    password = os.getenv("EMAIL_APP_PASSWORD")
+
+    if not sender or not receiver or not password:
+        print("⚠️ Email ENV not set, skip email alert")
+        return
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = sender
+        msg["To"] = receiver
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender, password)
+            server.send_message(msg)
+
+        print("📧 Email alert sent successfully")
+
+    except Exception as e:
+        print("❌ Email send failed:", e)
+
 def get_conn(retries=3, delay=2):
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
@@ -1198,18 +1229,48 @@ async def on_ready():
 async def db_health_check():
     await bot.wait_until_ready()
 
+    fail_count = 0
+    last_email_time = 0
+
+    CHECK_INTERVAL = 600      # 🔥 เช็คทุก 10 นาที (ดีที่สุดสำหรับ Railway)
+    ALERT_INTERVAL = 3600     # 📧 ส่งเมลซ้ำทุก 1 ชั่วโมง (กัน spam)
+
     while not bot.is_closed():
         try:
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-            print("🟢 DB Health: OK")
+
+            if fail_count > 0:
+                print("🟢 DB RECOVERED")
+
+            fail_count = 0
+            last_email_time = 0
 
         except Exception as e:
-            print("🚨 DB Health Check FAILED:", e)
+            fail_count += 1
+            print(f"🚨 DB Health Check FAILED ({fail_count}):", e)
 
-        # เช็คทุก 3600 วินาที (ไม่หนัก)
-        await asyncio.sleep(3600)
+            now = time.time()
+
+            # ให้ fail 2 รอบก่อนค่อยเตือน (กัน false alarm)
+            if fail_count >= 2:
+                if last_email_time == 0 or (now - last_email_time) >= ALERT_INTERVAL:
+                    send_email_alert(
+                        subject="🚨 Railway DB DOWN - Police Bot",
+                        body=(
+                            "Database connection failed.\n\n"
+                            "Railway PostgreSQL may be frozen or unreachable.\n"
+                            "Fix: Restart DB plugin in Railway.\n\n"
+                            "Bot Status: ONLINE\n"
+                            "DB Status: UNREACHABLE"
+                        )
+                    )
+                    last_email_time = now
+                    print("📧 Alert email sent")
+
+        await asyncio.sleep(CHECK_INTERVAL)
+
 
 def get_last_checked_time():
     try:
@@ -2213,6 +2274,29 @@ async def testbody(ctx, date_str: str):
         f"📦 รวมทั้งหมด: {result['total']} เคส\n"
         f"💾 บันทึกลง DB แล้ว"
     )
+
+@bot.command()
+@is_pbt()  # ให้เฉพาะ ผบตร. ใช้ กันสแปม
+async def testmail(ctx):
+    await ctx.send("📧 กำลังทดสอบส่งอีเมลแจ้งเตือน...")
+
+    try:
+        send_email_alert(
+            subject="🧪 TEST EMAIL - Police Bot",
+            body=(
+                "This is a test email from Railway Police Bot.\n\n"
+                "If you receive this email:\n"
+                "- Email system: OK\n"
+                "- SMTP Login: OK\n"
+                "- Environment Variables: OK\n\n"
+                "Time: " + now_th().strftime("%d/%m/%Y %H:%M:%S")
+            )
+        )
+
+        await ctx.send("✅ ส่งอีเมลทดสอบแล้ว (เช็คกล่องเมล)")
+
+    except Exception as e:
+        await ctx.send(f"❌ ส่งเมลล้มเหลว: `{e}`")
 
 @bot.command()
 @is_pbt()
