@@ -1208,8 +1208,8 @@ async def db_health_check():
         except Exception as e:
             print("🚨 DB Health Check FAILED:", e)
 
-        # เช็คทุก 180 วินาที (ไม่หนัก)
-        await asyncio.sleep(180)
+        # เช็คทุก 3600 วินาที (ไม่หนัก)
+        await asyncio.sleep(3600)
 
 def get_last_checked_time():
     try:
