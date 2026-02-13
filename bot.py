@@ -4,10 +4,7 @@
 import os
 import re
 import discord
-import smtplib
 import time
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import psycopg2
 from datetime import datetime, timedelta
 from discord.ext import commands
@@ -1230,10 +1227,7 @@ async def db_health_check():
     await bot.wait_until_ready()
 
     fail_count = 0
-    last_email_time = 0
-
-    CHECK_INTERVAL = 600      # 🔥 เช็คทุก 10 นาที (ดีที่สุดสำหรับ Railway)
-    ALERT_INTERVAL = 3600     # 📧 ส่งเมลซ้ำทุก 1 ชั่วโมง (กัน spam)
+    CHECK_INTERVAL = 600  # เช็คทุก 10 นาที
 
     while not bot.is_closed():
         try:
@@ -1245,31 +1239,14 @@ async def db_health_check():
                 print("🟢 DB RECOVERED")
 
             fail_count = 0
-            last_email_time = 0
 
         except Exception as e:
             fail_count += 1
             print(f"🚨 DB Health Check FAILED ({fail_count}):", e)
-
-            now = time.time()
-
-            # ให้ fail 2 รอบก่อนค่อยเตือน (กัน false alarm)
-            if fail_count >= 2:
-                if last_email_time == 0 or (now - last_email_time) >= ALERT_INTERVAL:
-                    send_email_alert(
-                        subject="🚨 Railway DB DOWN - Police Bot",
-                        body=(
-                            "Database connection failed.\n\n"
-                            "Railway PostgreSQL may be frozen or unreachable.\n"
-                            "Fix: Restart DB plugin in Railway.\n\n"
-                            "Bot Status: ONLINE\n"
-                            "DB Status: UNREACHABLE"
-                        )
-                    )
-                    last_email_time = now
-                    print("📧 Alert email sent")
+            print("📴 Email alert disabled (manual monitoring mode)")
 
         await asyncio.sleep(CHECK_INTERVAL)
+
 
 
 def get_last_checked_time():
