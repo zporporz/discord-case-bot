@@ -12,8 +12,8 @@ from audit.audit_commands import setup_audit_commands
 from discord import Embed
 from datetime import timezone
 import asyncio
-import time
 import random
+import requests
 
 from sheet import (
     get_sheet,
@@ -78,30 +78,38 @@ def is_pbt():
 # ======================
 
 def send_email_alert(subject, body):
-    sender = os.getenv("ALERT_EMAIL_FROM")
-    receiver = os.getenv("ALERT_EMAIL_TO")
-    password = os.getenv("EMAIL_APP_PASSWORD")
+    api_key = os.getenv("RESEND_API_KEY")
+    to_email = os.getenv("ALERT_EMAIL_TO")
+    from_email = os.getenv("ALERT_EMAIL_FROM")
 
-    if not sender or not receiver or not password:
-        print("⚠️ Email ENV not set, skip email alert")
+    if not api_key or not to_email or not from_email:
+        print("⚠️ Resend ENV not set, skip email alert")
         return
 
     try:
-        msg = MIMEMultipart()
-        msg["From"] = sender
-        msg["To"] = receiver
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": from_email,  # เช่น oncall@resend.dev
+                "to": [to_email],
+                "subject": subject,
+                "text": body,
+            },
+            timeout=10,
+        )
 
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender, password)
-            server.send_message(msg)
-
-        print("📧 Email alert sent successfully")
+        if 200 <= response.status_code < 300:
+            print("📧 Resend email sent successfully")
+        else:
+            print("❌ Resend email failed:", response.text)
 
     except Exception as e:
-        print("❌ Email send failed:", e)
+        print("❌ Resend exception:", e)
+
 
 def get_conn(retries=3, delay=2):
     if not DATABASE_URL:
@@ -506,14 +514,18 @@ def set_last_body_sync(date_str: str):
         print("❌ set_last_body_sync error:", e)
 
 def get_body_dashboard_message_id():
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT value FROM bot_meta
-                WHERE key = 'body_dashboard_message_id'
-            """)
-            row = cur.fetchone()
-            return int(row[0]) if row else None
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT value FROM bot_meta
+                    WHERE key = 'body_dashboard_message_id'
+                """)
+                row = cur.fetchone()
+                return int(row[0]) if row else None
+    except Exception as e:
+        print("❌ get_body_dashboard_message_id error:", e)
+        return None
 
 
 def set_body_dashboard_message_id(msg_id: int):
@@ -814,14 +826,18 @@ def build_dashboard_embed():
     return embed
 
 def get_dashboard_message_id():
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT value FROM bot_meta
-                WHERE key = 'dashboard_message_id'
-            """)
-            row = cur.fetchone()
-            return int(row[0]) if row else None
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT value FROM bot_meta
+                    WHERE key = 'dashboard_message_id'
+                """)
+                row = cur.fetchone()
+                return int(row[0]) if row else None
+    except Exception as e:
+        print("❌ get_dashboard_message_id error:", e)
+        return None
 
 def set_dashboard_message_id(msg_id: int):
     with get_conn() as conn:
@@ -838,13 +854,21 @@ async def dashboard_updater():
     channel = bot.get_channel(DASHBOARD_CHANNEL_ID)
 
     while not bot.is_closed():
-        # 🔹 รอให้ชนรอบ 15 นาทีทุกครั้ง
         wait_sec = seconds_until_next_quarter()
         print(f"⏳ Dashboard sync in {int(wait_sec)}s")
         await asyncio.sleep(wait_sec)
 
-        embed = build_dashboard_embed()
-        msg_id = get_dashboard_message_id()
+        try:
+            embed = build_dashboard_embed()
+        except Exception as e:
+            print("❌ build_dashboard_embed crash:", e)
+            continue  # 🔥 กัน loop ตาย
+
+        try:
+            msg_id = get_dashboard_message_id()
+        except Exception as e:
+            print("❌ get_dashboard_message_id DB error:", e)
+            continue
 
         try:
             if msg_id:
@@ -922,15 +946,18 @@ def build_weekly_ranking_embed():
 
 
 def get_weekly_ranking_message_id():
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT value FROM bot_meta
-                WHERE key = 'weekly_ranking_message_id'
-            """)
-            row = cur.fetchone()
-            return int(row[0]) if row else None
-
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT value FROM bot_meta
+                    WHERE key = 'weekly_ranking_message_id'
+                """)
+                row = cur.fetchone()
+                return int(row[0]) if row else None
+    except Exception as e:
+        print("❌ get_weekly_ranking_message_id error:", e)
+        return None
 
 def set_weekly_ranking_message_id(msg_id: int):
     with get_conn() as conn:
@@ -967,8 +994,19 @@ async def weekly_ranking_updater():
         print(f"⏳ Weekly ranking update in {int(wait_sec)}s")
         await asyncio.sleep(wait_sec)
 
-        embed = build_weekly_ranking_embed()
-        msg_id = get_weekly_ranking_message_id()
+        try:
+            embed = build_weekly_ranking_embed()
+        except Exception as e:
+            print("❌ weekly embed error:", e)
+            await asyncio.sleep(60)
+            continue
+
+        try:
+            msg_id = get_weekly_ranking_message_id()
+        except Exception as e:
+            print("❌ weekly msg_id DB error:", e)
+            await asyncio.sleep(60)
+            continue
 
         try:
             if msg_id:
@@ -980,12 +1018,11 @@ async def weekly_ranking_updater():
                 await msg.pin()
                 await random_react_dashboard(msg, count=10)
                 set_weekly_ranking_message_id(msg.id)
-
         except Exception as e:
             print("❌ Weekly ranking update error:", e)
 
-        # กันยิงซ้ำในนาทีเดียว
         await asyncio.sleep(60)
+
 
 def build_body_dashboard_embed(result, work_date):
     embed = Embed(
@@ -1229,7 +1266,9 @@ async def db_health_check():
     print("🩺 DB Health Check started")
 
     fail_count = 0
-    CHECK_INTERVAL = 3600  # เช็คทุก 1 ชั่วโมง
+    last_email_time = 0
+    CHECK_INTERVAL = 3600      # เช็คทุก 1 ชั่วโมง
+    ALERT_INTERVAL = 3600      # ส่งเมลซ้ำได้ทุก 1 ชม. (กัน spam)
 
     while not bot.is_closed():
         try:
@@ -1237,19 +1276,36 @@ async def db_health_check():
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
 
-            # ถ้าเคยล่มแล้วกลับมา
             if fail_count > 0:
                 print("🟢 DB RECOVERED")
 
-            # แสดงสถานะปกติ
             print("🟢 DB Health: OK")
-
             fail_count = 0
+            last_email_time = 0  # รีเซ็ต cooldown เมล
 
         except Exception as e:
             fail_count += 1
             print(f"🚨 DB Health Check FAILED ({fail_count}):", e)
-            print("📴 Email alert disabled (monitoring mode only)")
+
+            now_ts = time.time()
+
+            # ล่ม 2 รอบติด (≈ 2 ชม.) ค่อยแจ้งเมล
+            if fail_count >= 2:
+                if last_email_time == 0 or (now_ts - last_email_time) >= ALERT_INTERVAL:
+                    send_email_alert(
+                        subject="🚨 Railway DB DOWN - Police Bot",
+                        body=(
+                            "Database connection failed.\n\n"
+                            "Railway PostgreSQL may be frozen or unreachable.\n"
+                            "Action: Restart DB plugin in Railway.\n\n"
+                            f"Fail count: {fail_count}\n"
+                            f"Time: {now_th().strftime('%d/%m/%Y %H:%M:%S')}\n"
+                            "Bot Status: ONLINE\n"
+                            "DB Status: UNREACHABLE"
+                        )
+                    )
+                    last_email_time = now_ts
+                    print("📧 Resend alert sent (anti-spam)")
 
         await asyncio.sleep(CHECK_INTERVAL)
 
@@ -2209,13 +2265,13 @@ async def count_body_cases_split(work_date):
 
     chub_channel = bot.get_channel(BODY_CHUB_CHANNEL_ID)
     if chub_channel:
-        async for msg in chub_channel.history(after=start, before=end, limit=None):
+        async for msg in chub_channel.history(after=start, before=end, limit=2000):
             if not msg.author.bot:
                 chub += 1
 
     wrap_channel = bot.get_channel(BODY_WRAP_CHANNEL_ID)
     if wrap_channel:
-        async for msg in wrap_channel.history(after=start, before=end, limit=None):
+        async for msg in wrap_channel.history(after=start, before=end, limit=2000):
             if not msg.author.bot:
                 wrap += 1
 
@@ -2268,7 +2324,7 @@ async def testmail(ctx):
                 "This is a test email from Railway Police Bot.\n\n"
                 "If you receive this email:\n"
                 "- Email system: OK\n"
-                "- SMTP Login: OK\n"
+                "- Resend API: OK\n"
                 "- Environment Variables: OK\n\n"
                 "Time: " + now_th().strftime("%d/%m/%Y %H:%M:%S")
             )
