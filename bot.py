@@ -1226,8 +1226,10 @@ async def on_ready():
 async def db_health_check():
     await bot.wait_until_ready()
 
+    print("🩺 DB Health Check started")
+
     fail_count = 0
-    CHECK_INTERVAL = 600  # เช็คทุก 10 นาที
+    CHECK_INTERVAL = 3600  # เช็คทุก 1 ชั่วโมง
 
     while not bot.is_closed():
         try:
@@ -1235,19 +1237,21 @@ async def db_health_check():
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
 
+            # ถ้าเคยล่มแล้วกลับมา
             if fail_count > 0:
                 print("🟢 DB RECOVERED")
+
+            # แสดงสถานะปกติ
+            print("🟢 DB Health: OK")
 
             fail_count = 0
 
         except Exception as e:
             fail_count += 1
             print(f"🚨 DB Health Check FAILED ({fail_count}):", e)
-            print("📴 Email alert disabled (manual monitoring mode)")
+            print("📴 Email alert disabled (monitoring mode only)")
 
         await asyncio.sleep(CHECK_INTERVAL)
-
-
 
 def get_last_checked_time():
     try:
