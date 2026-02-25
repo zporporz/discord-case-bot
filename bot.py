@@ -17,7 +17,8 @@ import requests
 
 from sheet import (
     get_sheet,
-    find_day_column_safe,   # 👈 เพิ่มตัวนี้
+    get_sheet_by_date,
+    find_day_column_safe,
     write_body_case_total,
     build_name_row_map
 )
@@ -2179,7 +2180,8 @@ def run_daily_case_sync(target_date):
     if not rows:
         return 0, []
 
-    sheet = get_sheet()
+    # 🔥 แก้ตรงนี้บรรทัดเดียว (สำคัญมาก)
+    sheet = get_sheet_by_date(target_date)
 
     try:
         col = find_day_column_safe(target_date)
@@ -2188,7 +2190,7 @@ def run_daily_case_sync(target_date):
             f"⚠️ Skip sync: {target_date:%d/%m/%Y} "
             f"(ยังไม่มี column ใน worksheet)"
         )
-        return 0, []  # เขียน 0 คน และไม่มี skipped
+        return 0, []
 
     case_col = col + 1
 
@@ -2201,13 +2203,12 @@ def run_daily_case_sync(target_date):
     for norm_name, total_cases in rows:
         row = name_row_map.get(norm_name)
         if row is None:
-            #print("SKIP:", repr(norm_name))
             skipped.append(norm_name)
             continue
 
         updates.append({
             "range": rowcol_to_a1(row, case_col),
-            "values": [[(total_cases)]]
+            "values": [[total_cases]]
         })
         written += 1
 
